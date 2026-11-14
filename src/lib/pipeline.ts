@@ -1,6 +1,6 @@
 "use client";
 
-import type { BriefsOut, ConceptsOut, DesignDnaSchema, RepairOut, RoomAnalysis } from "@/lib/server/ai/schemas";
+import type { ConceptsOut, DesignDnaSchema, RepairOut, RoomAnalysis } from "@/lib/server/ai/schemas";
 import type { CheckedProduct } from "@/app/api/ai/products/route";
 import type { z } from "zod";
 import { compactDesign, designFromOut, tierTotal } from "./designConvert";
@@ -298,73 +298,42 @@ export async function resumeRun(roomId: ID, cb: RunCallbacks) {
   await continueRun(roomId, cb, cp);
 }
 
-/** B: briefs (3 distinct directions, one cheap call), then one detailed design per brief (concurrency 2). */
+/** B: all designs of a run in ONE call — the room's constraints are reasoned about once (measured: 3 designs
+ *  ≈ $0.19 / ~2 min, vs. ≈ $0.38 + briefs for three separate calls). */
 async function runConcepts(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint) {
   const room = (await getRoom(roomId))!;
   const inventory = await listInventory(room.projectId);
   const parent = cp.parentId ? await getDesign(cp.parentId) : undefined;
   const req = cp.request as { count: number } & Record<string, unknown>;
-  const runCosts = (e: CostEntry) => {
-    cp.costUsd += e.usd;
-    cb.onCost?.(e);
-  };
-  if (!cp.briefs) {
-    cb.onProgress("concepts", req.count > 1 ? `Choosing ${req.count} distinct directions…` : "Choosing the direction…");
-    const briefCosts: CostEntry[] = [];
-    const res = await postStream<BriefsOut>("/api/ai/briefs", req, {
-      signal: cb.signal,
-      onProgress: (m) => cb.onProgress("concepts", m),
-      onCost: (e) => (briefCosts.push(e), runCosts(e)),
+  cb.onProgress("concepts", req.count > 1 ? `Designing ${req.count} distinct options…` : "Designing the variation…");
+  const costs: CostEntry[] = [];
+  const out = await postStream<ConceptsOut>("/api/ai/concepts", req, {
+    signal: cb.signal,
+    onProgress: (m) => cb.onProgress("concepts", m),
+    onCost: (e) => {
+      costs.push(e);
+      cp.costUsd += e.usd;
+      cb.onCost?.(e);
+    },
+  });
+  const designs = out.designs.slice(0, req.count);
+  if (!designs.length) throw new Error("The AI returned no designs — please retry.");
+  for (let i = 0; i < designs.length; i++) {
+    const d = designFromOut(designs[i], {
+      roomId,
+      projectId: room.projectId,
+      roomModelVersion: room.model!.version,
+      runId: cp.runId,
+      inventory,
+      parent,
+      lockedIds: cp.lockedIds ?? [],
     });
-    cp.briefs = res.briefs.slice(0, req.count).map((b, i) => ({ ...b, index: i }));
-    cp.briefCosts = briefCosts;
-    cp.briefsDone = [];
-    await saveCheckpoint(roomId, cp);
+    // the shared call's cost is split evenly across the designs of this run
+    d.costs = costs.map((c) => ({ ...c, usd: c.usd / designs.length, note: "shared design call (split)" }));
+    d.createdAt = cp.startedAt + i;
+    await saveDesign(d);
+    cp.designIds = [...cp.designIds, d.id];
   }
-  const briefs = cp.briefs as ({ name: string; index: number } & Record<string, unknown>)[];
-  const todo = briefs.filter((b) => !(cp.briefsDone ?? []).includes(b.index));
-  let next = 0;
-  const failures: string[] = [];
-  const worker = async () => {
-    while (next < todo.length) {
-      const brief = todo[next++];
-      const scope = `concept-${brief.index}`;
-      cb.onProgress(scope, `Designing “${brief.name}”…`);
-      const costs: CostEntry[] = [];
-      try {
-        const out = await postStream<ConceptsOut>(
-          "/api/ai/concepts",
-          { ...req, count: 1, brief, otherBriefs: briefs.filter((b) => b.index !== brief.index) },
-          { signal: cb.signal, onProgress: (m) => cb.onProgress(scope, m), onCost: (e) => (costs.push(e), runCosts(e)) },
-        );
-        const o = out.designs[0];
-        if (!o) throw new Error("No design returned.");
-        const d = designFromOut(o, {
-          roomId,
-          projectId: room.projectId,
-          roomModelVersion: room.model!.version,
-          runId: cp.runId,
-          inventory,
-          parent,
-          lockedIds: cp.lockedIds ?? [],
-        });
-        const shared = (cp.briefCosts ?? []).map((c) => ({ ...c, usd: c.usd / briefs.length, note: "design directions (split)" }));
-        d.costs = [...shared, ...costs];
-        d.createdAt = cp.startedAt + brief.index;
-        await saveDesign(d);
-        cp.designIds = [...cp.designIds, d.id];
-        cp.briefsDone = [...(cp.briefsDone ?? []), brief.index];
-        await saveCheckpoint(roomId, cp);
-        cb.onProgress(scope, `“${d.name}” designed.`);
-      } catch (e) {
-        if (cb.signal?.aborted) throw e;
-        failures.push(`${brief.name}: ${(e as Error).message}`);
-        cb.onProgress(scope, `Failed: ${(e as Error).message}`);
-      }
-    }
-  };
-  await Promise.all([worker(), worker()]);
-  if (failures.length) throw new Error(`${failures.length} design(s) could not be created — use Resume to retry them. (${failures.join("; ")})`);
   cp.step = "check";
   await saveCheckpoint(roomId, cp);
 }
@@ -442,6 +411,8 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
         }
       }
       const pending = designs.filter((d) => !cp.productsDone.includes(d.id));
+      // Fixed, fair share of the remaining run budget per design (no design is left without products).
+      const share = Math.max(0, ROOM_RUN_LIMIT_USD - cp.costUsd) / Math.max(1, pending.filter((d) => (owner.get(d.id) ?? []).length).length);
       let idx = 0;
       // Saves results to EVERY design that has a slot in the returned groups — immediately, so a
       // resume never loses products that were already paid for.
@@ -464,13 +435,12 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
           const d = pending[idx++];
           const keys = owner.get(d.id) ?? [];
           const remaining = ROOM_RUN_LIMIT_USD - cp.costUsd;
-          if (keys.length && remaining <= 0.03) {
+          if (keys.length && (remaining <= 0.03 || share <= 0.03)) {
             cp.stoppedForBudget = true;
             cb.onProgress(d.id, "Skipped product search: the $1.00 limit for this run was reached.");
             continue;
           }
           if (keys.length) {
-            const designsLeft = pending.length - idx + 1;
             cb.onProgress(d.id, `Finding products for ${keys.length} item(s)…`);
             try {
               const res = await postStream<{ products: CheckedProduct[]; notes: string[]; stoppedForBudget: boolean; foundOn: string }>(
@@ -485,7 +455,7 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
                   }),
                   mode: "tiers",
                   maxSearches: Math.min(12, Math.max(3, keys.length + 1)),
-                  stopAtUsd: Math.max(0.02, Math.min(0.4, remaining / Math.max(1, designsLeft))),
+                  stopAtUsd: Math.max(0.02, Math.min(0.35, share * 0.9, remaining)),
                 },
                 { signal: cb.signal, onProgress: (m) => cb.onProgress(d.id, m), onCost: track(d.id) },
               );

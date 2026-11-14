@@ -76,7 +76,7 @@ export function DesignsStep({ room, designs }: { room: Room; designs: Design[] }
   }
 
   const designName = (id: string) =>
-    designs.find((d) => d.id === id)?.name ?? (id === "concepts" ? "Designs" : id === "done" ? "Status" : id.startsWith("concept-") ? `Design ${Number(id.slice(8)) + 1}` : id);
+    designs.find((d) => d.id === id)?.name ?? (id === "concepts" ? "Designs" : id === "done" ? "Status" : id);
 
   return (
     <div className="space-y-5">

@@ -116,7 +116,7 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
     name: out.name,
     summary: out.summary,
     style: out.style,
-    inspirationUse: out.inspirationUse || undefined,
+    inspirationUse: out.inspirationUse && !/^(no|none|n\/a|-)\b/i.test(out.inspirationUse.trim()) ? out.inspirationUse : undefined,
     approach: normApproach(out.approach),
     items,
     removed: out.removed.filter((r) => invIds.has(r.inventoryId)),

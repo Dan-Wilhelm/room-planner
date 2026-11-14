@@ -22,12 +22,10 @@ export const DesignRequest = z.object({
       lockedKeys: z.array(z.string()).max(60),
     })
     .optional(),
-  brief: z.any().optional(), // the brief this design must follow
-  otherBriefs: z.array(z.any()).max(3).optional(), // must clearly differ from these
 });
 export type DesignRequest = z.infer<typeof DesignRequest>;
 
-/** Common context for briefs and detailed designs. Room/inventory data are serialized JSON (data, not instructions). */
+/** Common context for the design call. Room/inventory data are serialized JSON (data, not instructions). */
 export function designContext(b: DesignRequest): string[] {
   const parts: string[] = [
     `ROOM "${b.roomName}" (room model JSON):`,

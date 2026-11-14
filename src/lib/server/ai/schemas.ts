@@ -160,20 +160,6 @@ export type DesignOut = z.infer<typeof DesignOutSchema>;
 export const ConceptsSchema = z.object({ designs: z.array(DesignOutSchema) });
 export type ConceptsOut = z.infer<typeof ConceptsSchema>;
 
-export const BriefsSchema = z.object({
-  briefs: z.array(
-    z.object({
-      name: z.string(),
-      style: z.string().describe("plain words, e.g. light wood, white walls, simple shapes"),
-      approach: oneOf(["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room", "none"]),
-      layoutIdea: z.string().describe("where the main pieces go and why, 2-3 sentences"),
-      palette: z.array(z.string()).describe("3-5 hex colours"),
-      keyPieces: z.array(z.string()),
-    }),
-  ),
-});
-export type BriefsOut = z.infer<typeof BriefsSchema>;
-
 // ---------------------------------------------------------------------------
 // C. Repair
 // ---------------------------------------------------------------------------

@@ -67,6 +67,13 @@ function log(msg: string) {
   fs.appendFileSync(path.join(OUT, "live-log.txt"), `${msg}\n`);
 }
 
+async function saveResults(page: Page, label: string) {
+  const designs = await idb<Array<Record<string, unknown>>>(page, ALL, { store: "designs" });
+  fs.writeFileSync(path.join(OUT, "designs.json"), JSON.stringify(designs, null, 1));
+  const total = designs.reduce((s, d) => s + (d.costs as { usd: number }[]).reduce((a, c) => a + c.usd, 0), 0);
+  log(`${label}: ${designs.length} designs stored, recorded cost $${total.toFixed(3)}`);
+}
+
 async function waitRunDone(page: Page, minutes: number) {
   const deadline = Date.now() + minutes * 60_000;
   for (;;) {
@@ -87,15 +94,20 @@ test("final acceptance run on production", async ({ page }) => {
 
   // --- Login, project, room 1
   await page.goto("/");
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Your projects" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
   await page.getByPlaceholder(/New project name/).fill("Test apartment");
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByLabel("Project name")).toHaveValue("Test apartment");
   const projectUrl = page.url();
+  await page.waitForLoadState("networkidle");
   await page.getByPlaceholder(/New room/).fill("Attic bedroom");
   await page.getByRole("button", { name: "Add room" }).click();
   await expect(page.getByRole("heading", { name: "Attic bedroom" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
   const [, projectId, roomId] = page.url().match(/\/p\/([^/]+)\/r\/([^/?#]+)/)!;
 
   // --- Exact test data: room model + furniture
@@ -106,6 +118,7 @@ test("final acceptance run on production", async ({ page }) => {
   await idb(page, PUT, { store: "inventory", value: inv("inv-wardrobe", "Wardrobe", "wardrobe", 100, 60, 200, "replaceable") });
   await idb(page, PUT, { store: "inventory", value: inv("inv-desk", "Desk", "desk", 120, 60, 75, "keep") });
   await page.reload();
+  await page.waitForLoadState("networkidle");
 
   // --- Review & confirm
   await page.getByRole("button", { name: "2 · Review" }).click();
@@ -128,9 +141,14 @@ test("final acceptance run on production", async ({ page }) => {
   await expect(compare.getByRole("row")).toHaveCount(4);
   await page.screenshot({ path: path.join(OUT, "01-designs.png"), fullPage: false });
 
-  // --- Alternatives on the rug
-  const rugCard = page.locator("div.rounded-lg", { hasText: /Rug ·/ }).filter({ has: page.getByRole("button", { name: "Alternatives" }) }).first();
-  await rugCard.getByRole("button", { name: "Alternatives" }).click();
+  await saveResults(page, "after run 1");
+
+  // --- Alternatives on the rug (or the first furniture item if this design has no new rug)
+  const cards = page.locator("div.rounded-lg").filter({ has: page.getByRole("button", { name: "Alternatives" }) });
+  const rugCard = cards.filter({ hasText: /Rug ·/ });
+  const target = (await rugCard.count()) ? rugCard.first() : cards.filter({ hasNotText: /^(Paint|Material|Cushion|Throw|Other) ·/ }).first();
+  log(`alternatives for: ${(await target.locator("span").first().innerText()).slice(0, 80)}`);
+  await target.getByRole("button", { name: "Alternatives" }).click();
   await page.getByPlaceholder(/cheaper, in green/).fill("cheaper");
   await page.getByRole("button", { name: "Find alternatives" }).click();
   const swaps = page.locator("aside").getByRole("button", { name: /Swap/ });
@@ -164,6 +182,7 @@ test("final acceptance run on production", async ({ page }) => {
   await waitRunDone(page, 20);
   await expect(compare.getByRole("row")).toHaveCount(3);
   log(`build-on done in ${Math.round((Date.now() - t1) / 1000)} s`);
+  await saveResults(page, "after build-on");
 
   // --- Mark chosen
   await page.getByRole("button", { name: "Mark as chosen" }).click();
@@ -171,9 +190,11 @@ test("final acceptance run on production", async ({ page }) => {
 
   // --- Room 2: estimation test (analysis only)
   await page.goto(projectUrl);
+  await page.waitForLoadState("networkidle");
   await page.getByPlaceholder(/New room/).fill("Living room (estimation test)");
   await page.getByRole("button", { name: "Add room" }).click();
   await expect(page.getByRole("heading", { name: "Living room (estimation test)" })).toBeVisible();
+  await page.waitForLoadState("networkidle");
   await page.getByPlaceholder(/What is the room used for/).fill("Living room with a sofa, a dining area and a big window. Roughly 5 by 4 metres. Ceiling height 2.50 m (measured).");
   await page.locator("input[type=file]").first().setInputFiles([1, 2, 3].map((i) => path.join(ASSETS, `living${i}.jpg`)));
   await expect(page.locator("img").nth(2)).toBeVisible({ timeout: 60_000 });
@@ -189,6 +210,7 @@ test("final acceptance run on production", async ({ page }) => {
 
   // --- Inspiration test
   await page.goto(projectUrl);
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Inspiration board" }).click();
   await page.getByPlaceholder("https://www.pinterest.com/pin/…").fill(PIN);
   await page.getByPlaceholder("What is meant? (optional)").fill("only the colours and the lighting");
@@ -206,6 +228,7 @@ test("final acceptance run on production", async ({ page }) => {
 
   // --- Room 1: start over following the inspiration
   await page.goto(`${projectUrl}/r/${roomId}`);
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "4 · Taste & idea" }).click();
   await page.getByText("Follow inspiration(s)").click();
   await page.getByRole("button", { name: /Next: designs/ }).click();
@@ -214,10 +237,12 @@ test("final acceptance run on production", async ({ page }) => {
   await page.waitForTimeout(3000);
   await waitRunDone(page, 25);
   log(`inspiration run done in ${Math.round((Date.now() - t2) / 1000)} s`);
+  await saveResults(page, "after inspiration run");
   await page.screenshot({ path: path.join(OUT, "04-inspiration-designs.png") });
 
   // --- Overview
   await page.goto(projectUrl);
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Overview & shopping list" }).click();
   await expect(page.getByText(/Combined shopping list — €\d/)).toBeVisible();
   log(`overview: ${await page.getByText(/Combined shopping list — €\d/).innerText()}`);
