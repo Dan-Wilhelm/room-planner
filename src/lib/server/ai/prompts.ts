@@ -79,6 +79,8 @@ RULES:
 - One search per slot should usually find candidates for BOTH tiers: "budget" = the cheapest product that still looks good; "nicer" = better quality/design at a moderate price. Give up to 3 ranked candidates per tier (rank 1 = best).
 - The product must fit the slot's maximum dimensions (W×D×H in cm). Report real dimensions when the search result shows them (dimsVerified true); otherwise put 0 and dimsVerified false — never invent dimensions, prices or URLs.
 - Only use product URLs that appeared in your search or fetch results. Use web fetch only when price or dimensions are missing from the search results.
+- Every URL must be a PRODUCT DETAIL page of one product (Amazon: contains /dp/), never a search, category or listing page. Each product has its own URL.
+- Only shops that sell and deliver in Germany: IKEA Germany (ikea.com/de/de/…), Amazon.de, German shop domains. Never other countries' shops (e.g. ikea.com/at/…).
 - For look-alike slots, find affordable products resembling the described piece and say briefly what is similar (shape, material, colour).
 - Paint: give the bucket size that matches the requested liters; plants: real plant products suitable for the light.
 - Flags: assembly = needs assembly; bulky = needs a car/van; pickup = can be picked up locally (e.g. IKEA Karlsruhe).

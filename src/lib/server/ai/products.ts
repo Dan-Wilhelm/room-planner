@@ -241,6 +241,22 @@ async function convertTextToProducts(text: string, emit: Emitter): Promise<{ res
   }
 }
 
+/** Rejects URLs that are not a German product detail page (search/listing pages, foreign shops). */
+export function isAcceptableProductUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  const host = u.hostname.replace(/^www\./, "");
+  const path = decodeURIComponent(u.pathname).toLowerCase();
+  if (/(^|\.)amazon\./.test(host)) return host === "amazon.de" && /\/(dp|gp\/product)\/[a-z0-9]{10}/i.test(path);
+  if (/(^|\.)ikea\.com$/.test(host)) return path.startsWith("/de/de/") && path.includes("/p/");
+  if (/\/(s|search|suche|such|kategorie|category|c)\/?$/.test(path) || u.searchParams.has("q") || u.searchParams.has("k")) return false;
+  return true;
+}
+
 export interface ProductSearchResult {
   products: SubmitProducts["products"];
   droppedUnknownUrls: number;
@@ -280,12 +296,15 @@ export async function searchProducts(input: ProductSearchInput, emit: Emitter, s
     if (final) {
       if (final.notes) notes.push(final.notes);
       const keys = new Set(batches[b].map((s) => s.key));
+      const seen = new Set<string>();
       for (const p of final.products) {
         if (!keys.has(p.slotKey)) continue;
-        if (!/^https?:\/\//i.test(p.url) || !urls.has(normalizeUrl(p.url))) {
+        const dedupe = `${p.slotKey}|${p.tier}|${normalizeUrl(p.url)}`;
+        if (!/^https?:\/\//i.test(p.url) || !urls.has(normalizeUrl(p.url)) || !isAcceptableProductUrl(p.url) || seen.has(dedupe)) {
           dropped++;
           continue;
         }
+        seen.add(dedupe);
         all.push(p);
       }
     }
