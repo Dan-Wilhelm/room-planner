@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Room Planner
 
-## Getting Started
+AI interior-design assistant for whole apartments — a private test app for a few people in the Karlsruhe area.
 
-First, run the development server:
+A **project** (apartment, house, several homes) contains **rooms**, a shared **furniture inventory** and an **inspiration board**. For each room you:
+
+1. **Capture** it — text description, photos and/or a walkthrough video (only 8–12 downscaled frames are used; the video never leaves your computer), and the dimensions you know. Any shape: templates (rectangle, L, rectangle + niche, U) or a corner table; sloped ceilings, doors, windows, roof windows, radiators, sockets, built-ins.
+2. **Review** the room model. Values you entered are never overwritten; AI estimates are marked with confidence and a reason.
+3. Assign **furniture** (keep = only move, replaceable = may be replaced; spare items from other rooms can be used).
+4. Optionally state your **taste** (plain words), a **style source** (independent / match another room / follow inspirations), an **idea** and a **budget** (incl. paint + small materials, excl. shipping).
+5. Get **3 complete designs** — layout, lighting plan, paint with quantities, textiles, plants, decor — each with **real products** from IKEA, Amazon.de, Otto, DIY stores and garden centres in two tiers (“Budget” / “A bit nicer”), shown in **3D**, as a **2D plan** and on demand as a **photorealistic image**. Click any item for 5 alternatives, build variations on a design, compare, mark one as chosen, export the shopping list.
+
+A deterministic geometry module checks every layout (fits the room, headroom under slopes, walkways ≥ 80 cm, door swings, radiators, windows, sockets) — the AI is not trusted with spatial maths.
+
+## Stack
+
+Next.js 16 (App Router, `proxy.ts`, Node runtime, `cacheComponents` off) · TypeScript · Tailwind · three.js / react-three-fiber / drei · Anthropic TypeScript SDK (Claude Sonnet 5.5 for analysis & design, Claude Haiku 5.5 for product search) · Vercel AI SDK 7 + AI Gateway (Gemini “Nano Banana 2.1” images) · IndexedDB (all data stays in the browser) · Vitest + Playwright.
+
+Deployed on Vercel (team `dans-projects-98`, region `fra1`).
+
+## Local setup
 
 ```bash
+npm install
+vercel link            # once
+vercel env pull        # writes .env.local (git-ignored); re-run after 12 h for a fresh OIDC token
+cp .env.example .env.development.local   # optional overrides for `next dev`, e.g. APP_PASSWORD=localtest, AI_MODE=mock
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`AI_MODE=mock` (default for local development) uses realistic fixtures with simulated streaming — no API costs. `AI_MODE=live` calls the real APIs.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Tests: `npm run test:unit` (Vitest) · `npm run test:e2e` (Playwright, full flow in mock mode) · `npm test` runs both.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment variables
 
-## Learn More
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | yes | Claude API (server-side only) |
+| `APP_PASSWORD` | yes | shared password for the app |
+| `SESSION_SECRET` | yes | ≥ 32 chars, signs the session cookie |
+| `AI_MODE` | yes | `live` in production, `mock` locally |
+| `PRODUCT_SEARCH_MODEL` | no | default `claude-haiku-5-5` |
+| `IMAGE_MODEL` | no | default `google/gemini-nano-banana-2.1` |
+| `AI_GATEWAY_API_KEY` | no | only for local image generation without OIDC |
+| `META_OEMBED_TOKEN`, `META_IG_USER_TOKEN`, `META_IG_USER_ID`, `META_IG_USER_TOKEN_EXPIRES` | no | optional Instagram booster (see below) |
 
-To learn more about Next.js, take a look at the following resources:
+Never commit `.env*` files — this repository is public. `npm run secret-scan` checks staged files (run before every commit).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Costs (list prices as of 2026-11-14)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Step | Model | Typical cost |
+| --- | --- | --- |
+| Room analysis (≤ 12 images) | Claude Sonnet 5.5 | $0.05–0.15 |
+| 3 design concepts (+ repair) | Claude Sonnet 5.5 | $0.15–0.35 |
+| Product search, 3 designs × 2 tiers | Claude Haiku 5.5 + web search ($0.01/search) | $0.20–0.45 |
+| **Full room run** | | **hard limit $1.00** (search stops early and says so) |
+| Find alternatives (one item) | Claude Haiku 5.5 | ≤ $0.10 |
+| Inspiration analysis | Claude Sonnet 5.5 | ≤ $0.15 |
+| Photorealistic image | Nano Banana 2.1 via AI Gateway | ≈ $0.034 |
 
-## Deploy on Vercel
+Every design shows its real costs (tokens, searches, images) in a cost panel.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Please set spend limits:**
+- Anthropic Console → *Plans & Billing* / *Limits*: a monthly spend limit for the workspace of the API key.
+- Vercel → *AI Gateway → Budgets*: e.g. `vercel ai-gateway budgets set project room-planner --limit 10 --refresh-period monthly` (check `--help` first). Image generation needs **paid** AI Gateway credits — the free tier does not include the image model.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Instagram booster (optional, off by default)
+
+Instagram usually blocks link previews. Without the booster, add 2–4 screenshots or a screen recording of the post — that always works. To enable the booster later, use **your own** Meta app and Instagram account — never credentials from other projects (e.g. client websites):
+
+1. Create an app at <https://developers.facebook.com/apps> (type *Business*).
+2. **oEmbed** (caption + author): add the *oEmbed Read* feature; set `META_OEMBED_TOKEN` to the app token `APP_ID|APP_SECRET` (or `APP_ID|CLIENT_TOKEN`).
+3. **Business Discovery** (real images of posts from other creator/business accounts): switch your own Instagram account to *Creator* or *Business*, link it to a Facebook Page, add the *Instagram API with Facebook Login* product (Instagram Login alone does not support Business Discovery), and create a long-lived user token with `instagram_basic` and `pages_show_list`. Set `META_IG_USER_TOKEN`, `META_IG_USER_ID` (your Instagram professional account id) and `META_IG_USER_TOKEN_EXPIRES` (ISO date — the app warns 7 days before; tokens last ~60 days).
+4. `vercel env add <NAME> production` for each, then redeploy.
+
+Limits: no media for videos with licensed music, reels with downloads disabled, private or personal accounts — the app falls back to screenshots.
+
+## Security notes
+
+Password gate in the app (`proxy.ts` + HMAC-signed cookie; every API route checks it again; login throttling). Web pages and captions are treated as data, never as instructions. Product links are checked by our server through an SSRF-safe fetcher (no private IPs, size/time limits, no cookies). Links render with `rel="noopener noreferrer nofollow"`.
