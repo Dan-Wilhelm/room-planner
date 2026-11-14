@@ -1,6 +1,6 @@
 "use client";
 
-import type { ConceptsOut, DesignDnaSchema, RepairOut, RoomAnalysis } from "@/lib/server/ai/schemas";
+import type { BriefsOut, ConceptsOut, DesignDnaSchema, RepairOut, RoomAnalysis } from "@/lib/server/ai/schemas";
 import type { CheckedProduct } from "@/app/api/ai/products/route";
 import type { z } from "zod";
 import { compactDesign, designFromOut, tierTotal } from "./designConvert";
@@ -259,57 +259,30 @@ export async function runDesigns(roomId: ID, opts: DesignRunOptions, cb: RunCall
   const room = await getRoom(roomId);
   if (!room?.model) throw new Error("Please capture and confirm the room first.");
   const inventory = await listInventory(room.projectId);
-  const runId = newId();
-  const cp: PipelineCheckpoint = { runId, kind: opts.kind, step: "concepts", designIds: [], productsDone: [], startedAt: Date.now(), costUsd: 0 };
-  await saveCheckpoint(roomId, cp);
-  const track = (e: CostEntry) => {
-    cp.costUsd += e.usd;
-    cb.onCost?.(e);
-  };
-
-  cb.onProgress("concepts", opts.kind === "buildOn" ? "Creating variations…" : "Designing 3 options…");
   const parent = opts.kind === "buildOn" ? await getDesign(opts.parentId) : undefined;
-  const conceptCosts: CostEntry[] = [];
-  const out = await postStream<ConceptsOut>(
-    "/api/ai/concepts",
-    {
-      roomName: room.name,
-      room: room.model,
-      inventory: inventoryForPrompt(inventory, roomId),
-      taste: room.taste,
-      style: await styleContext(room),
-      idea: room.idea,
-      budget: room.budget,
-      count: opts.kind === "buildOn" ? opts.count : (opts.count ?? 3),
-      buildOn: parent && opts.kind === "buildOn" ? { design: compactDesign(parent), feedback: opts.feedback, lockedKeys: opts.lockedIds } : undefined,
-    },
-    {
-      signal: cb.signal,
-      onProgress: (m) => cb.onProgress("concepts", m),
-      onCost: (e) => {
-        conceptCosts.push(e);
-        track(e);
-      },
-    },
-  );
-  const designs = out.designs.slice(0, 3).map((o, i) => {
-    const d = designFromOut(o, {
-      roomId,
-      projectId: room.projectId,
-      roomModelVersion: room.model!.version,
-      runId,
-      inventory,
-      parent,
-      lockedIds: opts.kind === "buildOn" ? opts.lockedIds : [],
-    });
-    // Attribute the concept cost evenly to the designs of this run.
-    d.costs = conceptCosts.map((c) => ({ ...c, usd: c.usd / out.designs.length, note: i === 0 ? "shared concept call (split)" : "shared" }));
-    d.createdAt = Date.now() + i;
-    return d;
-  });
-  for (const d of designs) await saveDesign(d, false);
-  cp.designIds = designs.map((d) => d.id);
-  cp.step = "check";
+  const request = {
+    roomName: room.name,
+    room: room.model,
+    inventory: inventoryForPrompt(inventory, roomId),
+    taste: room.taste,
+    style: await styleContext(room),
+    idea: room.idea,
+    budget: room.budget,
+    count: opts.kind === "buildOn" ? opts.count : (opts.count ?? 3),
+    buildOn: parent && opts.kind === "buildOn" ? { design: compactDesign(parent), feedback: opts.feedback, lockedKeys: opts.lockedIds } : undefined,
+  };
+  const cp: PipelineCheckpoint = {
+    runId: newId(),
+    kind: opts.kind,
+    step: "concepts",
+    designIds: [],
+    productsDone: [],
+    startedAt: Date.now(),
+    costUsd: 0,
+    request,
+    parentId: parent?.id,
+    lockedIds: opts.kind === "buildOn" ? opts.lockedIds : [],
+  };
   await saveCheckpoint(roomId, cp);
   await continueRun(roomId, cb, cp);
   return cp.designIds;
@@ -320,9 +293,80 @@ export async function resumeRun(roomId: ID, cb: RunCallbacks) {
   const room = await getRoom(roomId);
   const cp = room?.pipeline;
   if (!cp || cp.step === "done") return;
-  if (cp.step === "concepts" || cp.designIds.length === 0) throw new Error("The run stopped before designs were created — please start it again.");
+  if (cp.step === "concepts" && !cp.request) throw new Error("The run stopped before designs were created — please start it again.");
   cp.error = undefined;
   await continueRun(roomId, cb, cp);
+}
+
+/** B: briefs (3 distinct directions, one cheap call), then one detailed design per brief (concurrency 2). */
+async function runConcepts(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint) {
+  const room = (await getRoom(roomId))!;
+  const inventory = await listInventory(room.projectId);
+  const parent = cp.parentId ? await getDesign(cp.parentId) : undefined;
+  const req = cp.request as { count: number } & Record<string, unknown>;
+  const runCosts = (e: CostEntry) => {
+    cp.costUsd += e.usd;
+    cb.onCost?.(e);
+  };
+  if (!cp.briefs) {
+    cb.onProgress("concepts", req.count > 1 ? `Choosing ${req.count} distinct directions…` : "Choosing the direction…");
+    const briefCosts: CostEntry[] = [];
+    const res = await postStream<BriefsOut>("/api/ai/briefs", req, {
+      signal: cb.signal,
+      onProgress: (m) => cb.onProgress("concepts", m),
+      onCost: (e) => (briefCosts.push(e), runCosts(e)),
+    });
+    cp.briefs = res.briefs.slice(0, req.count).map((b, i) => ({ ...b, index: i }));
+    cp.briefCosts = briefCosts;
+    cp.briefsDone = [];
+    await saveCheckpoint(roomId, cp);
+  }
+  const briefs = cp.briefs as ({ name: string; index: number } & Record<string, unknown>)[];
+  const todo = briefs.filter((b) => !(cp.briefsDone ?? []).includes(b.index));
+  let next = 0;
+  const failures: string[] = [];
+  const worker = async () => {
+    while (next < todo.length) {
+      const brief = todo[next++];
+      const scope = `concept-${brief.index}`;
+      cb.onProgress(scope, `Designing “${brief.name}”…`);
+      const costs: CostEntry[] = [];
+      try {
+        const out = await postStream<ConceptsOut>(
+          "/api/ai/concepts",
+          { ...req, count: 1, brief, otherBriefs: briefs.filter((b) => b.index !== brief.index) },
+          { signal: cb.signal, onProgress: (m) => cb.onProgress(scope, m), onCost: (e) => (costs.push(e), runCosts(e)) },
+        );
+        const o = out.designs[0];
+        if (!o) throw new Error("No design returned.");
+        const d = designFromOut(o, {
+          roomId,
+          projectId: room.projectId,
+          roomModelVersion: room.model!.version,
+          runId: cp.runId,
+          inventory,
+          parent,
+          lockedIds: cp.lockedIds ?? [],
+        });
+        const shared = (cp.briefCosts ?? []).map((c) => ({ ...c, usd: c.usd / briefs.length, note: "design directions (split)" }));
+        d.costs = [...shared, ...costs];
+        d.createdAt = cp.startedAt + brief.index;
+        await saveDesign(d);
+        cp.designIds = [...cp.designIds, d.id];
+        cp.briefsDone = [...(cp.briefsDone ?? []), brief.index];
+        await saveCheckpoint(roomId, cp);
+        cb.onProgress(scope, `“${d.name}” designed.`);
+      } catch (e) {
+        if (cb.signal?.aborted) throw e;
+        failures.push(`${brief.name}: ${(e as Error).message}`);
+        cb.onProgress(scope, `Failed: ${(e as Error).message}`);
+      }
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  if (failures.length) throw new Error(`${failures.length} design(s) could not be created — use Resume to retry them. (${failures.join("; ")})`);
+  cp.step = "check";
+  await saveCheckpoint(roomId, cp);
 }
 
 async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint) {
@@ -334,6 +378,7 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
     void updateDesign(designId, (d) => ({ costs: [...d.costs, e] }));
   };
   try {
+    if (cp.step === "concepts") await runConcepts(roomId, cb, cp);
     // C. geometry check + one repair round
     if (cp.step === "check") {
       for (const id of cp.designIds) {

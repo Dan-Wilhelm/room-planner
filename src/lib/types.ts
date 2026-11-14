@@ -461,6 +461,13 @@ export interface PipelineCheckpoint {
   costUsd: number;
   stoppedForBudget?: boolean;
   error?: string;
+  /** Concept stage state (resumable): the original request, the design briefs and which are done. */
+  request?: unknown;
+  briefs?: unknown[];
+  briefsDone?: number[];
+  briefCosts?: CostEntry[];
+  parentId?: ID;
+  lockedIds?: ID[];
 }
 
 // ---------------------------------------------------------------------------

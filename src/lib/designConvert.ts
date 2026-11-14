@@ -1,8 +1,23 @@
 import type { DesignOut } from "@/lib/server/ai/schemas";
 import { newId } from "./db";
-import type { Design, ID, InventoryItem, PlacedItem, Slot, Tier } from "./types";
+import { ITEM_CATEGORIES } from "./categories";
+import type { Design, ID, InventoryItem, ItemCategory, PlacedItem, Slot, Tier } from "./types";
 
 const MAX_SLOTS = 20;
+
+// The design schema uses free-text fields (keeps the structured-output grammar small) — normalize here.
+const CATS = new Set<string>(ITEM_CATEGORIES);
+const lc = (v: string) => (v ?? "").trim();
+export const normCategory = (v: string): ItemCategory => {
+  const t = lc(v);
+  if (CATS.has(t)) return t as ItemCategory;
+  const ci = ITEM_CATEGORIES.find((c) => c.toLowerCase() === t.toLowerCase().replace(/[\s_-]/g, ""));
+  return ci ?? "other";
+};
+const normMount = (v: string): PlacedItem["mount"] => (["floor", "wall", "ceiling", "onTop"].includes(lc(v)) ? (lc(v) as PlacedItem["mount"]) : "floor");
+const normZone = (v: string): "ambient" | "task" | "accent" => (["ambient", "task", "accent"].includes(lc(v).toLowerCase()) ? (lc(v).toLowerCase() as "ambient" | "task" | "accent") : "ambient");
+const APPROACHES = ["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room"] as const;
+const normApproach = (v: string): Design["approach"] => APPROACHES.find((a) => a === lc(v).toLowerCase());
 const num = (v: number, min = 0) => (Number.isFinite(v) ? Math.max(min, Math.round(v)) : min);
 const rot = (v: number) => ((Math.round(v) % 360) + 360) % 360;
 const hex = (v: string, fallback = "#bbbbbb") => (/^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim() : fallback);
@@ -33,7 +48,7 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
   for (const it of out.items) {
     const id = itemId.get(it.key)!;
     let ref: PlacedItem["ref"] | null = null;
-    if (it.ref === "inventory" && invIds.has(it.inventoryId)) ref = { type: "inventory", inventoryId: it.inventoryId };
+    if (lc(it.ref) === "inventory" && invIds.has(it.inventoryId)) ref = { type: "inventory", inventoryId: it.inventoryId };
     else if (it.slotKey && slotId.has(it.slotKey)) ref = { type: "slot", slotId: slotId.get(it.slotKey)! };
     if (!ref) continue; // dangling reference (unknown inventory id or slot beyond the limit)
     const parentItem = parentItems.get(id);
@@ -44,7 +59,7 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
     items.push({
       id,
       ref,
-      category: it.category,
+      category: normCategory(it.category),
       label: it.label,
       x: num(it.x, -10000),
       y: num(it.y, -10000),
@@ -53,7 +68,7 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
       d: num(it.d, 1),
       h: num(it.h, 1),
       z: it.z > 0 ? num(it.z) : undefined,
-      mount: it.mount,
+      mount: normMount(it.mount),
       stackedOn: it.stackedOnKey ? itemId.get(it.stackedOnKey) : undefined,
       colorHex: hex(it.colorHex),
       material: it.material || undefined,
@@ -75,7 +90,7 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
     slots.push({
       id,
       placedItemId: s.placedKey ? (itemId.get(s.placedKey) ?? null) : null,
-      category: s.category,
+      category: normCategory(s.category),
       label: s.label,
       maxW: num(s.maxW),
       maxD: num(s.maxD),
@@ -102,17 +117,17 @@ export function designFromOut(out: DesignOut, ctx: ConvertCtx): Design {
     summary: out.summary,
     style: out.style,
     inspirationUse: out.inspirationUse || undefined,
-    approach: out.approach === "none" ? undefined : out.approach,
+    approach: normApproach(out.approach),
     items,
     removed: out.removed.filter((r) => invIds.has(r.inventoryId)),
     slots,
     products,
     lighting: {
-      zones: out.lighting.zones,
+      zones: out.lighting.zones.map((z) => ({ ...z, kind: normZone(z.kind) })),
       lights: out.lighting.lights.map((l) => ({
         label: l.label,
         placedItemId: l.placedKey ? itemId.get(l.placedKey) : undefined,
-        zone: l.zone,
+        zone: normZone(l.zone),
         lumens: num(l.lumens),
         kelvin: num(l.kelvin),
         dimmable: l.dimmable,

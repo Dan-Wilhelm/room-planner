@@ -6,6 +6,9 @@ import { ITEM_CATEGORIES } from "@/lib/categories";
 // no nullable unions — "none"/"" /0 are used as sentinels instead.
 
 const Category = z.enum(ITEM_CATEGORIES);
+/** Free-text variants keep the compiled grammar small for the large design schema (normalized in code). */
+const CategoryStr = z.string().describe(`one of: ${ITEM_CATEGORIES.join(", ")}`);
+const oneOf = (values: readonly string[]) => z.string().describe(`one of: ${values.join(" | ")}`);
 const Confidence = z.enum(["low", "medium", "high"]);
 
 // ---------------------------------------------------------------------------
@@ -75,10 +78,10 @@ export type RoomAnalysis = z.infer<typeof RoomAnalysisSchema>;
 // ---------------------------------------------------------------------------
 const PlacedItemOut = z.object({
   key: z.string().describe("unique within the design, e.g. 'bed', 'lamp1'"),
-  ref: z.enum(["inventory", "slot"]),
+  ref: oneOf(["inventory", "slot"]),
   inventoryId: z.string().describe("inventory id for existing items, else ''"),
   slotKey: z.string().describe("slot key for new items, else ''"),
-  category: Category,
+  category: CategoryStr,
   label: z.string(),
   x: z.number(),
   y: z.number(),
@@ -87,7 +90,7 @@ const PlacedItemOut = z.object({
   d: z.number(),
   h: z.number(),
   z: z.number(),
-  mount: z.enum(["floor", "wall", "ceiling", "onTop"]),
+  mount: oneOf(["floor", "wall", "ceiling", "onTop"]),
   stackedOnKey: z.string().describe("key of the item it stands/lies on, else ''"),
   colorHex: z.string(),
   material: z.string(),
@@ -98,7 +101,7 @@ const PlacedItemOut = z.object({
 const SlotOut = z.object({
   key: z.string(),
   placedKey: z.string().describe("key of the placed item, '' for paint/materials/cushions"),
-  category: Category,
+  category: CategoryStr,
   label: z.string(),
   maxW: z.number(),
   maxD: z.number(),
@@ -118,17 +121,17 @@ export const DesignOutSchema = z.object({
   summary: z.string(),
   style: z.string(),
   inspirationUse: z.string(),
-  approach: z.enum(["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room", "none"]),
+  approach: oneOf(["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room", "none"]),
   items: z.array(PlacedItemOut),
   removed: z.array(z.object({ inventoryId: z.string(), reason: z.string() })),
   slots: z.array(SlotOut),
   lighting: z.object({
-    zones: z.array(z.object({ name: z.string(), kind: z.enum(["ambient", "task", "accent"]), description: z.string() })),
+    zones: z.array(z.object({ name: z.string(), kind: oneOf(["ambient", "task", "accent"]), description: z.string() })),
     lights: z.array(
       z.object({
         label: z.string(),
         placedKey: z.string(),
-        zone: z.enum(["ambient", "task", "accent"]),
+        zone: oneOf(["ambient", "task", "accent"]),
         lumens: z.number(),
         kelvin: z.number(),
         dimmable: z.boolean(),
@@ -156,6 +159,20 @@ export type DesignOut = z.infer<typeof DesignOutSchema>;
 
 export const ConceptsSchema = z.object({ designs: z.array(DesignOutSchema) });
 export type ConceptsOut = z.infer<typeof ConceptsSchema>;
+
+export const BriefsSchema = z.object({
+  briefs: z.array(
+    z.object({
+      name: z.string(),
+      style: z.string().describe("plain words, e.g. light wood, white walls, simple shapes"),
+      approach: oneOf(["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room", "none"]),
+      layoutIdea: z.string().describe("where the main pieces go and why, 2-3 sentences"),
+      palette: z.array(z.string()).describe("3-5 hex colours"),
+      keyPieces: z.array(z.string()),
+    }),
+  ),
+});
+export type BriefsOut = z.infer<typeof BriefsSchema>;
 
 // ---------------------------------------------------------------------------
 // C. Repair

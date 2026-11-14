@@ -1,6 +1,6 @@
-import { z } from "zod";
 import type { InventoryItem, RoomModel } from "@/lib/types";
 import { isMock } from "@/lib/server/ai/client";
+import { DesignRequest, designContext } from "@/lib/server/ai/designPrompt";
 import { mockConcepts } from "@/lib/server/ai/mock";
 import { ndjsonResponse } from "@/lib/server/ai/ndjson";
 import { CONCEPTS_SYSTEM } from "@/lib/server/ai/prompts";
@@ -10,75 +10,35 @@ import { structuredCall } from "@/lib/server/ai/structured";
 
 export const maxDuration = 800;
 
-const Body = z.object({
-  roomName: z.string().max(200),
-  room: z.any(),
-  inventory: z.array(z.any()).max(200),
-  taste: z.any(),
-  style: z.object({
-    mode: z.enum(["independent", "matchRoom", "inspiration"]),
-    otherRoomDesign: z.any().optional(), // compact summary of the other room's chosen design
-    dnas: z.array(z.any()).max(6).optional(),
-    elements: z.string().max(500).optional(),
-  }),
-  idea: z.string().max(2000),
-  budget: z.number().nullable(),
-  count: z.number().int().min(1).max(3),
-  buildOn: z
-    .object({
-      design: z.any(), // compact design (items, slots, colours…)
-      feedback: z.string().max(2000),
-      lockedKeys: z.array(z.string()).max(60),
-    })
-    .optional(),
-});
+// Effort for the detailed design call. "medium" keeps a design at ~$0.13 / ~90 s (measured);
+// "high" was ~3× the cost and time for similar layout quality (the geometry check + repair fix the rest).
+const designEffort = () => (process.env.DESIGN_EFFORT as "low" | "medium" | "high" | undefined) ?? "medium";
 
 export async function POST(req: Request) {
-  const parsed = await readJson(req, Body);
+  const parsed = await readJson(req, DesignRequest);
   if ("error" in parsed) return parsed.error;
   const b = parsed.body;
   return ndjsonResponse(req, async (emit) => {
     if (isMock()) {
-      return mockConcepts(emit, b.room as RoomModel, b.inventory as InventoryItem[], b.count, b.budget, b.style.mode === "inspiration");
+      const approachIdx = Number((b.brief as { index?: number } | undefined)?.index ?? 0);
+      const out = await mockConcepts(emit, b.room as RoomModel, b.inventory as InventoryItem[], b.count, b.budget, b.style.mode === "inspiration", approachIdx);
+      return out;
     }
-    const parts: string[] = [
-      `ROOM "${b.roomName}" (room model JSON):`,
-      JSON.stringify(b.room),
-      "",
-      "INVENTORY (existing furniture; flag keep = must stay in this room, replaceable = may be replaced/removed; roomId null = spare from another room):",
-      JSON.stringify(b.inventory),
-      "",
-      "TASTE (plain-language answers; dontKnow = show clearly different directions):",
-      JSON.stringify(b.taste),
-      "",
-      `STYLE SOURCE: ${b.style.mode}`,
-    ];
-    if (b.style.mode === "matchRoom") parts.push("Match the style of this design from another room:", JSON.stringify(b.style.otherRoomDesign ?? {}));
-    if (b.style.mode === "inspiration") {
-      parts.push("Follow these inspiration design DNAs:", JSON.stringify(b.style.dnas ?? []));
-      if (b.style.elements) parts.push(`Only use these elements of the inspiration: ${b.style.elements}`);
+    const parts = designContext(b);
+    if (b.brief) {
+      parts.push("", "FOLLOW THIS BRIEF (direction for this design):", JSON.stringify(b.brief));
+      if (b.otherBriefs?.length) parts.push("The other designs of this run follow these briefs — yours must be clearly different from them:", JSON.stringify(b.otherBriefs));
     }
-    parts.push("", `IDEA: ${b.idea || "(none)"}`, `BUDGET (Budget tier, incl. paint + small materials, excl. shipping): ${b.budget != null ? `€${b.budget}` : "none given"}`);
-    if (b.buildOn) {
-      parts.push(
-        "",
-        `BUILD ON THIS EXISTING DESIGN — create ${b.count} variation(s) that apply the user's feedback and stay close otherwise:`,
-        JSON.stringify(b.buildOn.design),
-        `FEEDBACK: ${b.buildOn.feedback || "(none)"}`,
-        `LOCKED (keep these item/slot keys exactly as they are, including their slot keys): ${JSON.stringify(b.buildOn.lockedKeys)}`,
-      );
-    } else {
-      parts.push("", `Create ${b.count} complete, distinct designs.`);
-    }
+    parts.push("", b.count === 1 ? "Create 1 complete design." : `Create ${b.count} complete, distinct designs.`);
     const { data } = await structuredCall({
       step: b.buildOn ? "buildOn" : "concepts",
       system: CONCEPTS_SYSTEM,
       content: [{ type: "text", text: parts.join("\n") }],
       schema: ConceptsSchema,
-      maxTokens: 64000,
-      effort: "high",
+      maxTokens: 48000,
+      effort: designEffort(),
       emit,
-      progressLabel: b.buildOn ? "Creating variations" : "Designing",
+      progressLabel: b.buildOn ? "Creating the variation" : "Designing",
     });
     return data;
   });

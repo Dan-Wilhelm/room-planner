@@ -1,6 +1,6 @@
 import "server-only";
 import type { DesignDNA, InventoryItem, RoomModel } from "@/lib/types";
-import type { ConceptsOut, DesignOut, RepairOut, RoomAnalysis, SubmitProducts } from "./schemas";
+import type { BriefsOut, ConceptsOut, DesignOut, RepairOut, RoomAnalysis, SubmitProducts } from "./schemas";
 import type { Emitter } from "./ndjson";
 import { sleep } from "./ndjson";
 import type { SlotRequest } from "./products";
@@ -341,13 +341,39 @@ export function mockDesign(room: RoomModel, inventory: InventoryItem[], v: numbe
   };
 }
 
-export async function mockConcepts(emit: Emitter, room: RoomModel, inventory: InventoryItem[], count: number, budget: number | null, inspiration: boolean): Promise<ConceptsOut> {
-  await simulate(emit, "Designing", 6, 300);
-  emit.cost(MOCK_COST("concepts", 0.18));
+export async function mockConcepts(
+  emit: Emitter,
+  room: RoomModel,
+  inventory: InventoryItem[],
+  count: number,
+  budget: number | null,
+  inspiration: boolean,
+  startIdx = 0,
+): Promise<ConceptsOut> {
+  await simulate(emit, "Designing", 4, 250);
+  emit.cost(MOCK_COST("concepts", 0.06 * count));
   const approaches: DesignOut["approach"][] = inspiration
     ? ["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room"]
     : ["none", "none", "none"];
-  return { designs: Array.from({ length: count }, (_, i) => mockDesign(room, inventory, i, budget, approaches[i % 3])) };
+  return { designs: Array.from({ length: count }, (_, i) => mockDesign(room, inventory, startIdx + i, budget, approaches[(startIdx + i) % 3])) };
+}
+
+export async function mockBriefs(emit: Emitter, _room: RoomModel, count: number, inspiration: boolean): Promise<BriefsOut> {
+  void _room;
+  await simulate(emit, "Choosing design directions", 2, 200);
+  emit.cost(MOCK_COST("briefs", 0.01));
+  const approaches = ["close to the inspiration", "inspiration on a budget", "loose interpretation, adapted to this room"];
+  return {
+    briefs: Array.from({ length: count }, (_, i) => ({
+      index: i,
+      name: VARIANTS[i % 3].name,
+      style: VARIANTS[i % 3].style,
+      approach: inspiration ? approaches[i % 3] : "none",
+      layoutIdea: "Bed on the west wall out of the door swing, desk in the niche by the window (mock).",
+      palette: [...VARIANTS[i % 3].palette],
+      keyPieces: ["bed", "desk", "pendant"],
+    })),
+  } as BriefsOut;
 }
 
 export async function mockRepair(emit: Emitter): Promise<RepairOut> {
