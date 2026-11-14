@@ -616,7 +616,7 @@ export async function findAlternatives(designId: ID, slotId: ID, wish: string, c
       slots: [{ key: s.id, category: s.category, label: s.label, maxW: s.maxW, maxD: s.maxD, maxH: s.maxH, color: s.color, material: s.material, styleTags: s.styleTags, targetBudget: s.targetPrice.budget, targetNicer: s.targetPrice.nicer, quantity: s.quantity, lookAlike: s.lookAlike ?? "", notes: s.notes ?? "" }],
       mode: "alternatives",
       wish,
-      maxSearches: 3,
+      maxSearches: 4,
       stopAtUsd: 0.09,
     },
     {

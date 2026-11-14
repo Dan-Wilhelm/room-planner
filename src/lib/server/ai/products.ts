@@ -123,7 +123,7 @@ function buildUserText(input: ProductSearchInput, slots: SlotRequest[]): string 
     `Design: "${input.designName}" — style: ${input.style}`,
     input.budgetEur != null ? `Room budget for the Budget tier (incl. paint/materials, excl. shipping): €${input.budgetEur}` : "No fixed budget.",
     input.mode === "alternatives"
-      ? `Find 5 ALTERNATIVE products (tier "alternative", rank 1–5) for the slot below that match the design's style. User wish: "${input.wish || "no special wish"}".`
+      ? `Find up to 5 ALTERNATIVE products (tier "alternative", rank 1–5) for the slot below that match the design's style — the closest real matches if none is perfect. User wish: "${input.wish || "no special wish"}".`
       : `Find candidates for both tiers for each slot (up to 3 per tier).`,
     `You may use at most ${input.maxSearches} web searches in total.`,
     "",

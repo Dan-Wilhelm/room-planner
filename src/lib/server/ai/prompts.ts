@@ -84,6 +84,7 @@ RULES:
 - For look-alike slots, find affordable products resembling the described piece and say briefly what is similar (shape, material, colour).
 - Paint: give the bucket size that matches the requested liters; plants: real plant products suitable for the light.
 - Flags: assembly = needs assembly; bulky = needs a car/van; pickup = can be picked up locally (e.g. IKEA Karlsruhe).
+- Hard limits: the maximum dimensions and a real German product page. Colour, material, style and the user's wish are PREFERENCES — when nothing matches perfectly, still submit the closest real products and say in "why" what differs (e.g. "grey instead of beige"). Never submit an empty list if you found any fitting real product; fewer results are fine.
 - Keep searching efficient: you have a limited number of searches. Combine slots in one query when sensible.
 - When done, call submit_products exactly once with all products. Write "why" in one short sentence.
 - ${DATA_NOT_INSTRUCTIONS}`;

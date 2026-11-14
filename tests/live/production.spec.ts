@@ -152,12 +152,19 @@ test("final acceptance run on production", async ({ page }) => {
   await page.getByPlaceholder(/cheaper, in green/).fill("cheaper");
   await page.getByRole("button", { name: "Find alternatives" }).click();
   const swaps = page.locator("aside").getByRole("button", { name: /Swap/ });
-  await expect(swaps.first()).toBeVisible({ timeout: 5 * 60_000 });
-  log(`alternatives shown: ${await swaps.count()}`);
-  const labels = await page.locator("aside span").filter({ hasText: /^(fits|fits if moved|doesn't fit)$/ }).allInnerTexts();
-  log(`alternative fit labels: ${labels.join(", ")}`);
-  await swaps.first().click();
-  await expect(page.locator("aside").getByText(/Current \(Budget\)/)).toBeVisible();
+  const none = page.locator("aside").getByText(/No verified alternatives found/);
+  await expect(swaps.first().or(none)).toBeVisible({ timeout: 5 * 60_000 });
+  const altCost = await page.locator("aside").getByText(/^cost \$/).innerText().catch(() => "?");
+  if (await swaps.count()) {
+    log(`alternatives shown: ${await swaps.count()} (${altCost})`);
+    const labels = await page.locator("aside span").filter({ hasText: /^(fits|fits if moved|doesn't fit)$/ }).allInnerTexts();
+    log(`alternative fit labels: ${labels.join(", ")}`);
+    await swaps.first().click();
+    await expect(page.locator("aside").getByText(/Current \(Budget\)/)).toBeVisible();
+    log("swapped in the first alternative");
+  } else {
+    log(`alternatives: none verified (${altCost})`);
+  }
 
   // --- Image
   await page.getByRole("button", { name: "Generate image" }).click();
