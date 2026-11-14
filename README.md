@@ -47,17 +47,20 @@ Tests: `npm run test:unit` (Vitest) · `npm run test:e2e` (Playwright, full flow
 
 Never commit `.env*` files — this repository is public. `npm run secret-scan` checks staged files (run before every commit).
 
-## Costs (list prices as of 2026-11-14)
+## Costs (measured on production, 2026-11-14)
 
-| Step | Model | Typical cost |
+| Step | Model | Measured |
 | --- | --- | --- |
-| Room analysis (≤ 12 images) | Claude Sonnet 5.5 | $0.05–0.15 |
-| 3 design concepts (+ repair) | Claude Sonnet 5.5 | $0.15–0.35 |
-| Product search, 3 designs × 2 tiers | Claude Haiku 5.5 + web search ($0.01/search) | $0.20–0.45 |
-| **Full room run** | | **hard limit $1.00** (search stops early and says so) |
-| Find alternatives (one item) | Claude Haiku 5.5 | ≤ $0.10 |
-| Inspiration analysis | Claude Sonnet 5.5 | ≤ $0.15 |
-| Photorealistic image | Nano Banana 2.1 via AI Gateway | ≈ $0.034 |
+| Room analysis (text + 1–3 images) | Claude Sonnet 5.5 | ≈ $0.04–0.06 |
+| 3 designs (one call, effort `low`) | Claude Sonnet 5.5 | ≈ $0.19, ~2 min |
+| Product search, 3 designs × 2 tiers incl. link check | Claude Haiku 5.5 + web search ($0.01/search) | ≈ $0.45–0.65 |
+| **Full room run** (designs + products) | | **$0.74–0.88**, 4–5.5 min — hard limit $1.00 (each design gets an equal product budget; search stops early and says so) |
+| Build on a design (2 variations) | Sonnet + Haiku | ≈ $0.43, ~2.5 min |
+| Find alternatives (one item) | Claude Haiku 5.5 | $0.02–0.06 |
+| Inspiration analysis | Claude Sonnet 5.5 | ≈ $0.01 |
+| Photorealistic image | Nano Banana 2.1 via AI Gateway | $0.034, ~20 s |
+
+Design effort can be raised with `DESIGN_EFFORT=medium|high` (measured: `high` costs ~3× for one design without better layouts).
 
 Every design shows its real costs (tokens, searches, images) in a cost panel.
 

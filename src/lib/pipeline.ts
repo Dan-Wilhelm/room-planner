@@ -121,7 +121,8 @@ export function mergeAnalysis(known: RoomModel | null, a: RoomAnalysis): RoomMod
     ceilingFeatures,
     wallColor: a.wallColor,
     floorType: a.floorType,
-    template: known?.template,
+    // AI-estimated outline: the template parameters no longer describe it → corner table ("custom").
+    template: { kind: "custom", params: {} },
     estimates,
     notes: a.summary,
   };

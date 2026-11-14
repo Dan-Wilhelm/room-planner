@@ -236,7 +236,7 @@ export function RoomModelEditor({ model, onChange }: { model: RoomModel; onChang
                       <Select<WallFeatureKind> value={f.kind} onChange={(k) => setWf(f, { kind: k, ...FEATURE_DEFAULTS[k] })} options={(Object.keys(FEATURE_LABEL) as WallFeatureKind[]).map((k) => ({ value: k, label: FEATURE_LABEL[k] }))} />
                     </td>
                     <td className="py-1 pr-2">
-                      <Select value={String(f.wallIndex)} onChange={(v) => setWf(f, { wallIndex: Number(v) })} options={wallOptions} className="w-20" />
+                      <Select value={String(f.wallIndex)} onChange={(v) => setWf(f, { wallIndex: Number(v) })} options={wallOptions} className="!w-auto min-w-[4.5rem]" />
                     </td>
                     <td className="py-1 pr-2">
                       <CmInput value={f.offset} min={0} max={5000} onChange={(v) => setWf(f, { offset: v })} estimate={e("offset")} />
