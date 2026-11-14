@@ -17,13 +17,18 @@ export default function RoomPage() {
   const { projectId, roomId } = useParams<{ projectId: string; roomId: string }>();
   const { data: project } = useLive(() => getProject(projectId), [projectId], undefined);
   const { data: room, loading } = useLive(() => getRoom(roomId), [roomId], undefined);
-  const { data: designs } = useLive(() => listDesigns(roomId), [roomId], []);
+  const { data: designs, loading: designsLoading } = useLive(() => listDesigns(roomId), [roomId], []);
   const [step, setStep] = useState<Step | null>(null);
 
   if (loading && !room) return <Shell>Loading…</Shell>;
   if (!room || !project) return <Shell>Room not found.</Shell>;
 
-  const current: Step = step ?? (designs.length ? "designs" : room.modelConfirmed ? "furniture" : room.model ? "review" : "capture");
+  // The starting tab is chosen ONCE from the room's state on load; afterwards only the user switches tabs
+  // (otherwise e.g. "Enter dimensions" would jump from Capture to Review).
+  if (step === null && !designsLoading) {
+    setStep(designs.length ? "designs" : room.modelConfirmed ? "furniture" : room.model ? "review" : "capture");
+  }
+  const current: Step = step ?? "capture";
 
   return (
     <Shell crumbs={[{ label: project.name, href: `/p/${project.id}` }, { label: room.name }]}>

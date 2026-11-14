@@ -7,6 +7,10 @@ const PASSWORD = process.env.E2E_PASSWORD ?? "";
 const ASSETS = process.env.LIVE_ASSETS ?? "";
 const OUT = process.env.LIVE_OUT ?? "test-results/live";
 const PIN = "https://www.pinterest.com/pin/warm-cozy-bedroom-vibes--3799980929874813/";
+// LIVE_PART=rest skips the first design run, build-on etc. (room 2 + inspiration only);
+// LIVE_INSP_RUN=0 skips the (≈ $0.9) design run that follows the inspiration.
+const PART = process.env.LIVE_PART ?? "all";
+const INSP_RUN = process.env.LIVE_INSP_RUN !== "0";
 
 const TEST_ROOM = {
   version: 2,
@@ -133,6 +137,7 @@ test("final acceptance run on production", async ({ page }) => {
   await page.getByRole("button", { name: /Next: designs/ }).click();
 
   // --- 3 designs (live)
+  if (PART === "all") {
   const t0 = Date.now();
   await page.getByRole("button", { name: "Create 3 designs" }).click();
   await waitRunDone(page, 25);
@@ -195,6 +200,8 @@ test("final acceptance run on production", async ({ page }) => {
   await page.getByRole("button", { name: "Mark as chosen" }).click();
   await expect(page.getByRole("button", { name: "Unmark as chosen" })).toBeVisible();
 
+  } // end PART === "all"
+
   // --- Room 2: estimation test (analysis only)
   await page.goto(projectUrl);
   await page.waitForLoadState("networkidle");
@@ -233,27 +240,33 @@ test("final acceptance run on production", async ({ page }) => {
   await expect(page.getByText("Design DNA")).toBeVisible({ timeout: 5 * 60_000 });
   log("design DNA extracted");
 
-  // --- Room 1: start over following the inspiration
-  await page.goto(`${projectUrl}/r/${roomId}`);
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "4 · Taste & idea" }).click();
-  await page.getByText("Follow inspiration(s)").click();
-  await page.getByRole("button", { name: /Next: designs/ }).click();
-  const t2 = Date.now();
-  await page.getByRole("button", { name: /Start over/ }).click();
-  await page.waitForTimeout(3000);
-  await waitRunDone(page, 25);
-  log(`inspiration run done in ${Math.round((Date.now() - t2) / 1000)} s`);
-  await saveResults(page, "after inspiration run");
-  await page.screenshot({ path: path.join(OUT, "04-inspiration-designs.png") });
+  if (INSP_RUN) {
+    // --- Room 1: designs following the inspiration
+    await page.goto(`${projectUrl}/r/${roomId}`);
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "4 · Taste & idea" }).click();
+    await page.getByText("Follow inspiration(s)").click();
+    if (PART !== "all") await page.locator("input[inputmode=decimal]").last().fill("300");
+    await page.getByRole("button", { name: /Next: designs/ }).click();
+    const t2 = Date.now();
+    await page.getByRole("button", { name: /Start over|Create 3 designs/ }).click();
+    await page.waitForTimeout(3000);
+    await waitRunDone(page, 25);
+    log(`inspiration run done in ${Math.round((Date.now() - t2) / 1000)} s`);
+    await saveResults(page, "after inspiration run");
+    const approaches = await page.locator("span").filter({ hasText: /^(close to the inspiration|inspiration on a budget|loose interpretation, adapted to this room)$/ }).allInnerTexts();
+    log(`approach badge(s) on the selected design: ${approaches.join(", ")}`);
+    await page.screenshot({ path: path.join(OUT, "04-inspiration-designs.png") });
+    if (PART !== "all") await page.getByRole("button", { name: "Mark as chosen" }).click();
 
-  // --- Overview
-  await page.goto(projectUrl);
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: "Overview & shopping list" }).click();
-  await expect(page.getByText(/Combined shopping list — €\d/)).toBeVisible();
-  log(`overview: ${await page.getByText(/Combined shopping list — €\d/).innerText()}`);
-  await page.screenshot({ path: path.join(OUT, "05-overview.png"), fullPage: true });
+    // --- Overview
+    await page.goto(projectUrl);
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: "Overview & shopping list" }).click();
+    await expect(page.getByText(/Combined shopping list — €\d/)).toBeVisible();
+    log(`overview: ${await page.getByText(/Combined shopping list — €\d/).innerText()}`);
+    await page.screenshot({ path: path.join(OUT, "05-overview.png"), fullPage: true });
+  }
 
   // --- Collect results
   const designs = await idb<Array<Record<string, unknown>>>(page, ALL, { store: "designs" });
