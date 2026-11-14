@@ -377,6 +377,8 @@ function walkObstacles(ctx: Ctx): Obstacle[] {
   for (const g of ctx.geos) {
     const c = g.item.category;
     if (c === "rug" || WINDOW_TEXTILE.has(c) || g.stacked) continue;
+    // A desk chair is pushed in under the desk / moved while walking — not a fixed obstacle.
+    if (c === "deskChair") continue;
     if (g.bottom >= WALK_HEADROOM) continue;
     obs.push({ poly: g.fp, itemId: g.item.id });
   }
@@ -701,8 +703,14 @@ function analyzeWalkwaysCtx(ctx: Ctx): WalkwayAnalysis {
     const mask = new Uint8Array(N);
     for (const s of sides) {
       const side = itemSide(g.item, s);
-      const m = markBand(grid, side.a, side.b, side.outward, 0, 60);
-      for (let k = 0; k < N; k++) if (m[k]) mask[k] = 1;
+      // Low furniture under a slope: the strip right in front can be below walking headroom (you
+      // step up and crouch). If the first 60 cm have no walkable cell, try strips further out.
+      for (const s0 of [0, 60, 100]) {
+        const m = markBand(grid, side.a, side.b, side.outward, s0, s0 + 60);
+        let any = false;
+        for (let k = 0; k < N; k++) if (m[k]) ((mask[k] = 1), (any = true));
+        if (any) break;
+      }
     }
     return mask;
   });

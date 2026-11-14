@@ -35,8 +35,7 @@ function classifyFloor(floorType: string | undefined): { kind: FloorKind; base: 
     const c = /beige|sand|cream/.test(s) ? "#cbbba0" : /blue/.test(s) ? "#6c7f99" : "#9a958d";
     return { kind: "carpet", base: c };
   }
-  if (/laminate|wood|oak|plank|vinyl|floorboard|parkett|dielen|timber|pine|walnut|birch|beech/.test(s))
-    return { kind: "planks", base };
+  if (/laminate|wood|oak|plank|vinyl|floorboard|parkett|dielen|timber|pine|walnut|birch|beech/.test(s)) return { kind: "planks", base };
   if (/concrete|screed|cement|epoxy|linoleum|lino|pvc/.test(s)) return { kind: "plain", base: "#b7b3ab" };
   if (!s.trim()) return { kind: "plain", base: "#cdc7bd" };
   return { kind: "plain", base: namedColorToHex(s) };

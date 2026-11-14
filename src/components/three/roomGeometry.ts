@@ -212,7 +212,7 @@ export function clipHalfPlane(poly: Point[], a: number, b: number, c: number): P
     const fp = f(p);
     const fq = f(q);
     if (fp >= 0) out.push(p);
-    if ((fp >= 0) !== (fq >= 0)) {
+    if (fp >= 0 !== fq >= 0) {
       const t = fp / (fp - fq);
       out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
     }
@@ -223,8 +223,7 @@ export function clipHalfPlane(poly: Point[], a: number, b: number, c: number): P
     const last = clean[clean.length - 1];
     if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 0.01) clean.push(p);
   }
-  if (clean.length > 1 && Math.hypot(clean[0].x - clean[clean.length - 1].x, clean[0].y - clean[clean.length - 1].y) <= 0.01)
-    clean.pop();
+  if (clean.length > 1 && Math.hypot(clean[0].x - clean[clean.length - 1].x, clean[0].y - clean[clean.length - 1].y) <= 0.01) clean.pop();
   return clean.length >= 3 && Math.abs(signedArea(clean)) > 0.5 ? clean : [];
 }
 
@@ -248,7 +247,9 @@ export function slopeRegion(ra: RoomAnalysis, si: SlopeInfo): Point[] {
     const a = gt * t.wall.nx - gs * si.wall.nx;
     const b = gt * t.wall.ny - gs * si.wall.ny;
     const c =
-      t.knee - gt * (t.wall.nx * t.wall.a.x + t.wall.ny * t.wall.a.y) - (si.knee - gs * (si.wall.nx * si.wall.a.x + si.wall.ny * si.wall.a.y));
+      t.knee -
+      gt * (t.wall.nx * t.wall.a.x + t.wall.ny * t.wall.a.y) -
+      (si.knee - gs * (si.wall.nx * si.wall.a.x + si.wall.ny * si.wall.a.y));
     poly = clipHalfPlane(poly, a, b, c);
   }
   return poly;

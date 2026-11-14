@@ -377,8 +377,13 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
     if (cp.step === "products") {
       const designs = (await Promise.all(cp.designIds.map((id) => getDesign(id)))).filter(Boolean) as Design[];
       const groups = new Map<string, { slot: Slot; designIds: ID[] }>();
-      const groupKeyOf = (s: Slot) =>
-        [s.category, Math.round(s.maxW / 20), Math.round(s.maxD / 20), Math.round(s.maxH / 20), s.color.toLowerCase(), [...s.styleTags].sort().join("|").toLowerCase(), s.lookAlike ?? ""].join("~");
+      // Identical slots (same category, size class, colour, style, look-alike) are searched only once.
+      const shortKeys = new Map<string, string>();
+      const groupKeyOf = (s: Slot) => {
+        const sig = [s.category, Math.round(s.maxW / 20), Math.round(s.maxD / 20), Math.round(s.maxH / 20), s.color.toLowerCase(), [...s.styleTags].sort().join("|").toLowerCase(), s.lookAlike ?? ""].join("~");
+        if (!shortKeys.has(sig)) shortKeys.set(sig, `g${shortKeys.size + 1}`);
+        return shortKeys.get(sig)!;
+      };
       const owner = new Map<ID, string[]>(); // design id -> group keys it is responsible for
       for (const d of designs) {
         if (cp.productsDone.includes(d.id)) continue;
@@ -393,8 +398,22 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
       }
       const pending = designs.filter((d) => !cp.productsDone.includes(d.id));
       let idx = 0;
-      const resultsByGroup = new Map<string, CheckedProduct[]>();
-      let foundOn = new Date().toISOString().slice(0, 10);
+      // Saves results to EVERY design that has a slot in the returned groups — immediately, so a
+      // resume never loses products that were already paid for.
+      const persistResults = async (products: CheckedProduct[], foundOn: string) => {
+        const byGroup = new Map<string, CheckedProduct[]>();
+        for (const p of products) byGroup.set(p.slotKey, [...(byGroup.get(p.slotKey) ?? []), p]);
+        for (const [key, g] of groups) {
+          if (!byGroup.has(key)) continue;
+          for (const did of g.designIds) {
+            await updateDesign(did, (x) => {
+              const next = { ...x.products };
+              for (const s of x.slots) if (groupKeyOf(s) === key && !next[s.id]?.budget.length) next[s.id] = toSlotProducts(byGroup.get(key)!, foundOn);
+              return { products: next };
+            });
+          }
+        }
+      };
       const worker = async () => {
         while (idx < pending.length) {
           const d = pending[idx++];
@@ -425,9 +444,9 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
                 },
                 { signal: cb.signal, onProgress: (m) => cb.onProgress(d.id, m), onCost: track(d.id) },
               );
-              foundOn = res.foundOn;
               if (res.stoppedForBudget) cp.stoppedForBudget = true;
-              for (const p of res.products) resultsByGroup.set(p.slotKey, [...(resultsByGroup.get(p.slotKey) ?? []), p]);
+              await persistResults(res.products, res.foundOn);
+              await updateDesign(d.id, { status: "searching", errorMessage: undefined });
             } catch (e) {
               if (cb.signal?.aborted) throw e;
               await updateDesign(d.id, { status: "error", errorMessage: (e as Error).message });
@@ -441,16 +460,6 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
       };
       await Promise.all([worker(), worker()]);
 
-      // assign results to every slot of every design in the group
-      for (const d of designs) {
-        const products: Design["products"] = { ...d.products };
-        for (const s of d.slots) {
-          if (products[s.id]?.budget.length) continue;
-          const found = resultsByGroup.get(groupKeyOf(s)) ?? [];
-          products[s.id] = toSlotProducts(found, foundOn);
-        }
-        await updateDesign(d.id, { products });
-      }
       if (cp.designIds.every((id) => cp.productsDone.includes(id)) || cp.stoppedForBudget) {
         cp.step = "final";
         await saveCheckpoint(roomId, cp);

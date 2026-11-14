@@ -37,8 +37,9 @@ export async function postStream<T>(url: string, body: unknown, h: StreamHandler
     throw new ApiError("Please sign in again.", false, 401);
   }
   if (!res.ok || !res.body) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(data.error ?? `Request failed (${res.status}).`, res.status >= 500, res.status);
+    const data = (await res.json().catch(() => ({}))) as { error?: string; details?: string[] };
+    const details = data.details?.length ? ` (${data.details.join("; ")})` : "";
+    throw new ApiError((data.error ?? `Request failed (${res.status}).`) + details, res.status >= 500, res.status);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

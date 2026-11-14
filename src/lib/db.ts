@@ -153,13 +153,16 @@ export async function saveRoom(room: Room) {
   await (await db()).put("rooms", { ...room, updatedAt: Date.now() });
   notify();
 }
+/** Read-modify-write inside ONE transaction, so concurrent updates never overwrite each other. */
 export async function updateRoom(id: ID, patch: Partial<Room> | ((r: Room) => Partial<Room>)) {
-  const d = await db();
-  const r = await d.get("rooms", id);
-  if (!r) return;
-  const p = typeof patch === "function" ? patch(r) : patch;
-  await d.put("rooms", { ...r, ...p, updatedAt: Date.now() });
-  notify();
+  const tx = (await db()).transaction("rooms", "readwrite");
+  const r = await tx.store.get(id);
+  if (r) {
+    const p = typeof patch === "function" ? patch(r) : patch;
+    await tx.store.put({ ...r, ...p, updatedAt: Date.now() });
+  }
+  await tx.done;
+  if (r) notify();
 }
 export async function duplicateRoom(id: ID): Promise<Room | null> {
   const d = await db();
@@ -225,12 +228,14 @@ export async function saveDesign(d: Design, doNotify = true) {
   if (doNotify) notify();
 }
 export async function updateDesign(id: ID, patch: Partial<Design> | ((d: Design) => Partial<Design>)) {
-  const dbx = await db();
-  const d = await dbx.get("designs", id);
-  if (!d) return;
-  const p = typeof patch === "function" ? patch(d) : patch;
-  await dbx.put("designs", { ...d, ...p });
-  notify();
+  const tx = (await db()).transaction("designs", "readwrite");
+  const d = await tx.store.get(id);
+  if (d) {
+    const p = typeof patch === "function" ? patch(d) : patch;
+    await tx.store.put({ ...d, ...p });
+  }
+  await tx.done;
+  if (d) notify();
 }
 export async function deleteDesign(id: ID) {
   await deleteMediaFor(id);

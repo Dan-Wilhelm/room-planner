@@ -28,7 +28,11 @@ export function rgbToHex({ r, g, b }: RGB): string {
 export function hexToRgb(hex: string): RGB | null {
   if (typeof hex !== "string") return null;
   let h = hex.trim().replace(/^#/, "");
-  if (/^[0-9a-f]{3}$/i.test(h)) h = h.split("").map((c) => c + c).join("");
+  if (/^[0-9a-f]{3}$/i.test(h))
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
   if (!/^[0-9a-f]{6}$/i.test(h)) return null;
   const n = parseInt(h, 16);
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
@@ -113,6 +117,9 @@ const NAMED: Record<string, string> = {
   rattan: "#c8a46b",
   bamboo: "#d3b77c",
   sage: "#9caf88",
+  "sage green": "#9caf88",
+  "olive green": "#6f7445",
+  "dusty blue": "#7d95ab",
   olive: "#7a7d4a",
   green: "#5f8a5a",
   "forest green": "#2f5236",
@@ -130,9 +137,9 @@ const NAMED: Record<string, string> = {
   blush: "#e8c4bd",
   blue: "#4a6fa5",
   "light blue": "#a9c6e0",
-  "navy": "#22304d",
+  navy: "#22304d",
   "navy blue": "#22304d",
-  "petrol": "#2c5d63",
+  petrol: "#2c5d63",
   teal: "#2f7a78",
   lavender: "#b9addb",
   purple: "#6d4c8a",

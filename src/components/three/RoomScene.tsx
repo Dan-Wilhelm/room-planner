@@ -26,7 +26,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, Line, OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls } from "@react-three/drei";
 import type { CeilingFeature, PlacedItem, Point, RoomModel, WallFeature } from "@/lib/types";
 import { kelvinToHex, mixHex, namedColorToHex, normalizeHex } from "@/lib/color";
 import {
@@ -128,45 +128,119 @@ export default function RoomScene(props: RoomSceneProps) {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
+  const labelEls = useRef(new Map<string, HTMLDivElement>());
+  const labelAnchors = useMemo<LabelAnchor[]>(() => {
+    if (!showLabels) return [];
+    const out: LabelAnchor[] = [];
+    safeItems.forEach((it, i) => {
+      if (!it.label || !finiteNum(it.x) || !finiteNum(it.y)) return;
+      const ceil = ceilingHeightAt(ra, it.x, it.y);
+      const z0 = resolveBaseZ(it, safeItems, ra);
+      const h = finiteNum(it.h) ? it.h : 50;
+      out.push({ id: it.id ?? `#${i}`, label: it.label, pos: planToWorld({ x: it.x, y: it.y }, Math.min(z0 + h, ceil) + 6) });
+    });
+    return out;
+  }, [showLabels, safeItems, ra]);
+
   return (
     <div className={className} style={className ? undefined : { width: "100%", height: "100%", minHeight: 320 }}>
-      <Canvas
-        shadows={{ enabled: true, type: THREE.PCFShadowMap }}
-        dpr={[1, 2]}
-        camera={{ fov: CAMERA_FOV, near: 0.1, far: 400, position: [6, 5, 8] }}
-        gl={{ antialias: true }}
-        onCreated={({ gl }) => {
-          // Neutral tone mapping keeps white walls white (ACES greys/yellows them).
-          gl.toneMapping = THREE.NeutralToneMapping;
-          gl.toneMappingExposure = 1.0;
-        }}
-        onPointerMissed={() => onSelectRef.current?.(null)}
-        style={{ width: "100%", height: "100%", touchAction: "none" }}
-      >
-        <color attach="background" args={["#e9ebee"]} />
-        <Suspense fallback={null}>
-          <SceneLights ra={ra} room={room} items={safeItems} />
-          <RoomShell
-            ra={ra}
-            room={room}
-            wallHex={wallHex}
-            paintHex={paint}
-            paintedKey={paintedKey}
-            floorType={floorKey}
-          />
-          <Furniture
-            ra={ra}
-            items={safeItems}
-            selectedId={selectedId}
-            onSelect={onSelect ? (id) => onSelectRef.current?.(id) : undefined}
-            showLabels={showLabels}
-          />
-        </Suspense>
-        <CameraRig ra={ra} preset={cameraPreset} controlled={camera} onCameraChange={onCameraChange} />
-        <CaptureBridge captureRef={captureRef} />
-      </Canvas>
+      <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <Canvas
+          shadows={{ enabled: true, type: THREE.PCFShadowMap }}
+          dpr={[1, 2]}
+          camera={{ fov: CAMERA_FOV, near: 0.1, far: 400, position: [6, 5, 8] }}
+          gl={{ antialias: true }}
+          onCreated={({ gl }) => {
+            // Neutral tone mapping keeps white walls white (ACES greys/yellows them).
+            gl.toneMapping = THREE.NeutralToneMapping;
+            gl.toneMappingExposure = 1.0;
+          }}
+          onPointerMissed={() => onSelectRef.current?.(null)}
+          style={{ width: "100%", height: "100%", touchAction: "none" }}
+        >
+          <color attach="background" args={["#e9ebee"]} />
+          <Suspense fallback={null}>
+            <SceneLights ra={ra} room={room} items={safeItems} />
+            <RoomShell ra={ra} room={room} wallHex={wallHex} paintHex={paint} paintedKey={paintedKey} floorType={floorKey} />
+            <Furniture
+              ra={ra}
+              items={safeItems}
+              selectedId={selectedId}
+              onSelect={onSelect ? (id) => onSelectRef.current?.(id) : undefined}
+            />
+          </Suspense>
+          <CameraRig ra={ra} preset={cameraPreset} controlled={camera} onCameraChange={onCameraChange} />
+          <CaptureBridge captureRef={captureRef} />
+          {showLabels && <LabelProjector anchors={labelAnchors} elements={labelEls} />}
+        </Canvas>
+        {showLabels && (
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }} aria-hidden>
+            {labelAnchors.map((a) => (
+              <div
+                key={a.id}
+                ref={(el) => {
+                  if (el) labelEls.current.set(a.id, el);
+                  else labelEls.current.delete(a.id);
+                }}
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  visibility: "hidden",
+                  whiteSpace: "nowrap",
+                  fontSize: 11,
+                  lineHeight: "14px",
+                  padding: "1px 6px",
+                  borderRadius: 6,
+                  background: a.id === selectedId ? "rgba(59,130,246,0.92)" : "rgba(255,255,255,0.88)",
+                  color: a.id === selectedId ? "#fff" : "#222",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                  fontFamily: "system-ui, sans-serif",
+                  willChange: "transform",
+                }}
+              >
+                {a.label}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Labels: plain DOM overlay, positioned every frame (no extra React roots)
+// ---------------------------------------------------------------------------
+
+interface LabelAnchor {
+  id: string;
+  label: string;
+  pos: THREE.Vector3;
+}
+
+function LabelProjector({ anchors, elements }: { anchors: LabelAnchor[]; elements: React.RefObject<Map<string, HTMLDivElement>> }) {
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ camera, size }) => {
+    const map = elements.current;
+    if (!map) return;
+    for (const a of anchors) {
+      const el = map.get(a.id);
+      if (!el) continue;
+      tmp.copy(a.pos).project(camera);
+      const visible = tmp.z > -1 && tmp.z < 1 && Math.abs(tmp.x) < 1.2 && Math.abs(tmp.y) < 1.2;
+      if (!visible) {
+        el.style.visibility = "hidden";
+        continue;
+      }
+      const x = ((tmp.x + 1) / 2) * size.width;
+      const y = ((1 - tmp.y) / 2) * size.height;
+      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+      el.style.visibility = "visible";
+      el.style.zIndex = String(Math.round((1 - tmp.z) * 10000));
+    }
+  });
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -245,7 +319,13 @@ function camKey(c: CameraState | undefined | null): string {
   return [...c.position, ...c.target].map((n) => (finiteNum(n) ? r3(n).toFixed(3) : "x")).join(",");
 }
 function validCam(c: CameraState | undefined | null): c is CameraState {
-  return !!c && Array.isArray(c.position) && Array.isArray(c.target) && [...c.position, ...c.target].length === 6 && [...c.position, ...c.target].every(finiteNum);
+  return (
+    !!c &&
+    Array.isArray(c.position) &&
+    Array.isArray(c.target) &&
+    [...c.position, ...c.target].length === 6 &&
+    [...c.position, ...c.target].every(finiteNum)
+  );
 }
 
 function CameraRig({
@@ -409,7 +489,8 @@ function sunDirection(ra: RoomAnalysis, room: RoomModel): THREE.Vector3 {
   }
   const north = finiteNum(room?.northAngle) ? room.northAngle : 0;
   let compass: number;
-  if (Math.hypot(ox, oy) < 1e-6) compass = 225; // no windows: afternoon south-west
+  if (Math.hypot(ox, oy) < 1e-6)
+    compass = 225; // no windows: afternoon south-west
   else compass = north + (Math.atan2(ox, oy) * 180) / Math.PI;
   compass = ((compass % 360) + 360) % 360;
   // At ~49° N with ~35° elevation the sun stays roughly between bearing 80° and 280°.
@@ -478,7 +559,7 @@ function SceneLights({ ra, room, items }: { ra: RoomAnalysis; room: RoomModel; i
         py += fy * 10;
       }
       hz = Math.min(hz, ceil - 3);
-      const lumens = finiteNum(it.lumens) && it.lumens > 0 ? it.lumens : DEFAULT_LUMENS[it.category] ?? 500;
+      const lumens = finiteNum(it.lumens) && it.lumens > 0 ? it.lumens : (DEFAULT_LUMENS[it.category] ?? 500);
       out.push({
         key: it.id,
         pos: planToWorld({ x: px, y: py }, hz),
@@ -492,10 +573,10 @@ function SceneLights({ ra, room, items }: { ra: RoomAnalysis; room: RoomModel; i
 
   return (
     <>
-      <hemisphereLight args={["#f4f6fb", "#d6cfc4", 1.15]} />
-      <ambientLight intensity={0.25} />
+      <hemisphereLight args={["#f4f6fb", "#d6cfc4", 2.1]} />
+      <ambientLight intensity={0.6} />
       {/* soft fill without shadows (passes through the ceiling) to give furniture some form */}
-      <directionalLight position={[center.x + 3, 8, center.z + 5]} intensity={0.55} color="#fff8ee" />
+      <directionalLight position={[center.x + 3, 8, center.z + 5]} intensity={0.9} color="#fff8ee" />
       <primitive object={target} position={center} />
       <directionalLight
         ref={sunRef}
@@ -540,13 +621,11 @@ function Furniture({
   items,
   selectedId,
   onSelect,
-  showLabels,
 }: {
   ra: RoomAnalysis;
   items: PlacedItem[];
   selectedId: string | null;
   onSelect?: (id: string | null) => void;
-  showLabels: boolean;
 }) {
   return (
     <>
@@ -554,7 +633,6 @@ function Furniture({
         if (!finiteNum(it.x) || !finiteNum(it.y)) return null;
         const ceil = ceilingHeightAt(ra, it.x, it.y);
         const z0 = resolveBaseZ(it, items, ra);
-        const h = finiteNum(it.h) ? it.h : 50;
         return (
           <group key={it.id ?? i}>
             <FurnitureMesh
@@ -564,30 +642,6 @@ function Furniture({
               baseZ={z0}
               onClick={onSelect ? () => onSelect(it.id) : undefined}
             />
-            {showLabels && it.label && (
-              <Html
-                position={[it.x / 100, Math.min(z0 + h, ceil) / 100 + 0.12, -it.y / 100]}
-                center
-                zIndexRange={[20, 0]}
-                style={{ pointerEvents: "none" }}
-              >
-                <div
-                  style={{
-                    whiteSpace: "nowrap",
-                    fontSize: 11,
-                    lineHeight: "14px",
-                    padding: "1px 6px",
-                    borderRadius: 6,
-                    background: it.id === selectedId ? "rgba(59,130,246,0.92)" : "rgba(255,255,255,0.88)",
-                    color: it.id === selectedId ? "#fff" : "#222",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-                    fontFamily: "system-ui, sans-serif",
-                  }}
-                >
-                  {it.label}
-                </div>
-              </Html>
-            )}
           </group>
         );
       })}
@@ -862,7 +916,15 @@ function OpeningParts({ o, inward, wallColor, part }: { o: Opening; inward: numb
           )}
           <mesh position={[cx, cy, 0]}>
             <planeGeometry args={[w - ft, h - ft]} />
-            <meshStandardMaterial color="#bfe2f5" transparent opacity={0.28} roughness={0.05} metalness={0.1} side={THREE.DoubleSide} depthWrite={false} />
+            <meshStandardMaterial
+              color="#bfe2f5"
+              transparent
+              opacity={0.28}
+              roughness={0.05}
+              metalness={0.1}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
           </mesh>
         </group>
         {t0 > 0.05 && (
@@ -887,18 +949,25 @@ function OpeningParts({ o, inward, wallColor, part }: { o: Opening; inward: numb
   const pivotZ = opensIn ? 0 : -inward * WALL_THICKNESS * 0.8;
   if (part === "leaf") {
     return (
-      <group position={[pivotS, t0, pivotZ]} rotation={[0, phi, 0]}>
-        <mesh position={[(dirSign * leafW) / 2, leafH / 2, inward * 0.02]} castShadow receiveShadow>
-          <boxGeometry args={[leafW, leafH, 0.04]} />
-          <meshStandardMaterial color="#f4f2ed" roughness={0.55} />
+      <>
+        {/* invisible, shadow-only plane: no sunlight through the door opening (the hall is indoors) */}
+        <mesh position={[cx, cy, -inward * WALL_THICKNESS]} castShadow raycast={() => null}>
+          <planeGeometry args={[w, h]} />
+          <meshBasicMaterial colorWrite={false} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
-        {[1, -1].map((side) => (
-          <mesh key={side} position={[dirSign * (leafW - 0.07), 1.05 - t0, inward * 0.02 + side * 0.035]} castShadow>
-            <boxGeometry args={[0.12, 0.02, 0.02]} />
-            <meshStandardMaterial color="#9a9a9a" metalness={0.7} roughness={0.3} />
+        <group position={[pivotS, t0, pivotZ]} rotation={[0, phi, 0]}>
+          <mesh position={[(dirSign * leafW) / 2, leafH / 2, inward * 0.02]} castShadow receiveShadow>
+            <boxGeometry args={[leafW, leafH, 0.04]} />
+            <meshStandardMaterial color="#f4f2ed" roughness={0.55} />
           </mesh>
-        ))}
-      </group>
+          {[1, -1].map((side) => (
+            <mesh key={side} position={[dirSign * (leafW - 0.07), 1.05 - t0, inward * 0.02 + side * 0.035]} castShadow>
+              <boxGeometry args={[0.12, 0.02, 0.02]} />
+              <meshStandardMaterial color="#9a9a9a" metalness={0.7} roughness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      </>
     );
   }
   return (
@@ -1103,15 +1172,7 @@ function liftedGeometry(region: Point[], holes: Point[][], heightCm: (p: Point) 
   return g;
 }
 
-function Ceiling({
-  ra,
-  room,
-  slopeColor,
-}: {
-  ra: RoomAnalysis;
-  room: RoomModel;
-  slopeColor: (id: string) => string;
-}) {
+function Ceiling({ ra, room, slopeColor }: { ra: RoomAnalysis; room: RoomModel; slopeColor: (id: string) => string }) {
   const roofWindows = useMemo(
     () =>
       (room.ceilingFeatures ?? [])
@@ -1138,7 +1199,9 @@ function Ceiling({
   const flatGeo = useMemo(() => {
     const region = flatCeilingRegion(ra);
     if (region.length < 3) return new THREE.BufferGeometry();
-    const holes = roofWindows.filter((rw) => rw.si === null && rw.planRect.every((p) => pointInPolygon(p, region))).map((rw) => rw.planRect);
+    const holes = roofWindows
+      .filter((rw) => rw.si === null && rw.planRect.every((p) => pointInPolygon(p, region)))
+      .map((rw) => rw.planRect);
     return liftedGeometry(region, holes, () => ra.base + 0.5);
   }, [ra, roofWindows]);
   useDisposeOnChange(flatGeo);
@@ -1153,7 +1216,13 @@ function Ceiling({
             </mesh>
             {/* faint "ghost" when seen from above, so the slope stays readable in top views */}
             <mesh geometry={m.geo} raycast={() => null}>
-              <meshBasicMaterial color={mixHex(slopeColor(m.si.slope.id), "#8899aa", 0.4)} side={THREE.BackSide} transparent opacity={0.22} depthWrite={false} />
+              <meshBasicMaterial
+                color={mixHex(slopeColor(m.si.slope.id), "#8899aa", 0.4)}
+                side={THREE.BackSide}
+                transparent
+                opacity={0.22}
+                depthWrite={false}
+              />
             </mesh>
           </group>
         ) : null,
@@ -1207,7 +1276,15 @@ function RoofWindow({ rw }: { rw: RoofWindowPlacement }) {
       ))}
       <mesh position={[0, 0, -0.02]}>
         <planeGeometry args={[w - ft, l - ft]} />
-        <meshStandardMaterial color="#bfe2f5" transparent opacity={0.3} roughness={0.05} metalness={0.1} side={THREE.DoubleSide} depthWrite={false} />
+        <meshStandardMaterial
+          color="#bfe2f5"
+          transparent
+          opacity={0.3}
+          roughness={0.05}
+          metalness={0.1}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
       </mesh>
       <mesh position={[0, -l / 2 + ft + 0.03, 0.025]}>
         <boxGeometry args={[w * 0.5, 0.03, 0.03]} />

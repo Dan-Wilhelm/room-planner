@@ -275,7 +275,12 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
               r={0.05}
             />
           ))}
-          <Soft s={[W - 0.02, 0.06, mattD * 0.68]} p={[0, top + 0.02, mattZ - mattD / 2 + (mattD * 0.68) / 2 - 0.01]} color={light} r={0.03} />
+          <Soft
+            s={[W - 0.02, 0.06, mattD * 0.68]}
+            p={[0, top + 0.02, mattZ - mattD / 2 + (mattD * 0.68) / 2 - 0.01]}
+            color={light}
+            r={0.03}
+          />
         </>
       );
     }
@@ -339,7 +344,12 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
           })}
           <Cyl rt={0.025} rb={0.03} h={seatY - 0.12} p={[0, 0.07, 0]} color="#777777" metal={0.6} rough={0.3} seg={10} />
           <Soft s={[W * 0.85, 0.08, D * 0.8]} p={[0, seatY - 0.04, -D * 0.04]} color={color} r={0.03} />
-          <Soft s={[W * 0.8, Math.max(H - seatY - 0.08, 0.1), 0.06]} p={[0, seatY + 0.05 + (H - seatY - 0.08) / 2, D * 0.36]} color={color} r={0.03} />
+          <Soft
+            s={[W * 0.8, Math.max(H - seatY - 0.08, 0.1), 0.06]}
+            p={[0, seatY + 0.05 + (H - seatY - 0.08) / 2, D * 0.36]}
+            color={color}
+            r={0.03}
+          />
           <Bx s={[0.05, 0.03, D * 0.4]} p={[-W * 0.42, seatY + 0.2, -D * 0.05]} color="#2b2b2b" />
           <Bx s={[0.05, 0.03, D * 0.4]} p={[W * 0.42, seatY + 0.2, -D * 0.05]} color="#2b2b2b" />
           <Bx s={[0.03, 0.2, 0.03]} p={[-W * 0.42, seatY + 0.1, -D * 0.05]} color="#2b2b2b" />
@@ -404,12 +414,26 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
           <Bx s={[W, H - 0.05, D]} p={[0, 0.05 + (H - 0.05) / 2, 0]} color={color} />
           <Bx s={[W - 0.04, 0.05, D - 0.04]} p={[0, 0.025, 0]} color={dark} />
           {Array.from({ length: doors - 1 }, (_, i) => (
-            <Bx key={`l${i}`} s={[0.004, H - 0.08, 0.004]} p={[-W / 2 + dw * (i + 1), 0.05 + (H - 0.05) / 2, -D / 2 - 0.002]} color={dark} />
+            <Bx
+              key={`l${i}`}
+              s={[0.004, H - 0.08, 0.004]}
+              p={[-W / 2 + dw * (i + 1), 0.05 + (H - 0.05) / 2, -D / 2 - 0.002]}
+              color={dark}
+            />
           ))}
           {Array.from({ length: doors }, (_, i) => {
             const right = i % 2 === 0;
             const hx = -W / 2 + dw * i + (right ? dw - 0.04 : 0.04);
-            return <Bx key={`h${i}`} s={[0.015, 0.22, 0.02]} p={[hx, Math.min(1.05, H * 0.55), -D / 2 - 0.012]} color="#8f8f8f" metal={0.6} rough={0.3} />;
+            return (
+              <Bx
+                key={`h${i}`}
+                s={[0.015, 0.22, 0.02]}
+                p={[hx, Math.min(1.05, H * 0.55), -D / 2 - 0.012]}
+                color="#8f8f8f"
+                metal={0.6}
+                rough={0.3}
+              />
+            );
           })}
         </>
       );
@@ -426,8 +450,24 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
         for (let c = 0; c < cols; c++) {
           const fx = -W / 2 + cw * c + cw / 2;
           const fy = legH + rh * r + rh / 2;
-          fronts.push(<Bx key={`f${r}-${c}`} s={[cw - 0.012, rh - 0.012, 0.012]} p={[fx, fy, -D / 2 - 0.006]} color={mixHex(color, "#ffffff", 0.05)} />);
-          fronts.push(<Bx key={`k${r}-${c}`} s={[0.1, 0.012, 0.015]} p={[fx, fy + rh * 0.15, -D / 2 - 0.018]} color="#8f8f8f" metal={0.6} rough={0.3} />);
+          fronts.push(
+            <Bx
+              key={`f${r}-${c}`}
+              s={[cw - 0.012, rh - 0.012, 0.012]}
+              p={[fx, fy, -D / 2 - 0.006]}
+              color={mixHex(color, "#ffffff", 0.05)}
+            />,
+          );
+          fronts.push(
+            <Bx
+              key={`k${r}-${c}`}
+              s={[0.1, 0.012, 0.015]}
+              p={[fx, fy + rh * 0.15, -D / 2 - 0.018]}
+              color="#8f8f8f"
+              metal={0.6}
+              rough={0.3}
+            />,
+          );
         }
       return (
         <>
@@ -452,7 +492,12 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
           const bh = Math.min(gap - 0.03, 0.16 + rand() * 0.12);
           if (bx + bw > W / 2 - t - 0.02 || bh <= 0.02) break;
           books.push(
-            <Bx key={`b${i}-${k}`} s={[bw, bh, Math.min(D - 0.04, 0.2)]} p={[bx + bw / 2, t + gap * i + bh / 2 + t / 2, 0]} color={bookColors[Math.floor(rand() * bookColors.length)]} />,
+            <Bx
+              key={`b${i}-${k}`}
+              s={[bw, bh, Math.min(D - 0.04, 0.2)]}
+              p={[bx + bw / 2, t + gap * i + bh / 2 + t / 2, 0]}
+              color={bookColors[Math.floor(rand() * bookColors.length)]}
+            />,
           );
           bx += bw + 0.002;
         }
@@ -491,9 +536,29 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
       const poleH = H - shadeH * 0.6;
       return (
         <>
-          <Cyl rt={Math.min(0.14, shadeR * 0.8)} rb={Math.min(0.15, shadeR * 0.85)} h={0.03} p={[0, 0, 0]} color={color} metal={0.3} rough={0.5} seg={24} />
+          <Cyl
+            rt={Math.min(0.14, shadeR * 0.8)}
+            rb={Math.min(0.15, shadeR * 0.85)}
+            h={0.03}
+            p={[0, 0, 0]}
+            color={color}
+            metal={0.3}
+            rough={0.5}
+            seg={24}
+          />
           <Cyl rt={0.012} rb={0.012} h={poleH} p={[0, 0.03, 0]} color={color} metal={0.4} rough={0.4} seg={8} />
-          <Cyl rt={shadeR * 0.7} rb={shadeR} h={shadeH} p={[0, H - shadeH, 0]} color={mixHex("#f3eee2", kel, 0.3)} emissive={kel} emissiveIntensity={0.6} open side={THREE.DoubleSide} seg={24} />
+          <Cyl
+            rt={shadeR * 0.7}
+            rb={shadeR}
+            h={shadeH}
+            p={[0, H - shadeH, 0]}
+            color={mixHex("#f3eee2", kel, 0.3)}
+            emissive={kel}
+            emissiveIntensity={0.6}
+            open
+            side={THREE.DoubleSide}
+            seg={24}
+          />
           <mesh position={[0, H - shadeH * 0.6, 0]}>
             <sphereGeometry args={[0.04, 12, 8]} />
             <meshBasicMaterial color={kel} toneMapped={false} />
@@ -509,7 +574,18 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
         <>
           <Cyl rt={r * 0.45} rb={r * 0.55} h={H * 0.35} p={[0, 0, 0]} color={color} rough={0.4} seg={16} />
           <Cyl rt={0.008} rb={0.008} h={H * 0.25} p={[0, H * 0.35, 0]} color="#888888" seg={6} />
-          <Cyl rt={r * 0.7} rb={r} h={shadeH} p={[0, H - shadeH, 0]} color={mixHex("#f3eee2", kel, 0.3)} emissive={kel} emissiveIntensity={0.7} open side={THREE.DoubleSide} seg={20} />
+          <Cyl
+            rt={r * 0.7}
+            rb={r}
+            h={shadeH}
+            p={[0, H - shadeH, 0]}
+            color={mixHex("#f3eee2", kel, 0.3)}
+            emissive={kel}
+            emissiveIntensity={0.7}
+            open
+            side={THREE.DoubleSide}
+            seg={20}
+          />
         </>
       );
     }
@@ -520,7 +596,19 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
       const cord = Math.max(d.ceil - d.z0 - shadeH, 0.02);
       return (
         <>
-          <Cyl rt={r * 0.25} rb={r} h={shadeH} p={[0, 0, 0]} color={color} emissive={kel} emissiveIntensity={0.15} open side={THREE.DoubleSide} seg={24} rough={0.5} />
+          <Cyl
+            rt={r * 0.25}
+            rb={r}
+            h={shadeH}
+            p={[0, 0, 0]}
+            color={color}
+            emissive={kel}
+            emissiveIntensity={0.15}
+            open
+            side={THREE.DoubleSide}
+            seg={24}
+            rough={0.5}
+          />
           <mesh position={[0, shadeH * 0.25, 0]}>
             <sphereGeometry args={[Math.min(0.05, r * 0.3), 12, 8]} />
             <meshBasicMaterial color={kel} toneMapped={false} />
@@ -535,7 +623,18 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
       return (
         <>
           <Bx s={[Math.min(W, 0.12), Math.min(H, 0.12), 0.02]} p={[0, H / 2, D / 2 - 0.01]} color={color} />
-          <Cyl rt={Math.min(W, H) * 0.35} rb={Math.min(W, H) * 0.45} h={H * 0.6} p={[0, H * 0.2, 0]} color={mixHex(color, kel, 0.4)} emissive={kel} emissiveIntensity={0.7} open side={THREE.DoubleSide} seg={16} />
+          <Cyl
+            rt={Math.min(W, H) * 0.35}
+            rb={Math.min(W, H) * 0.45}
+            h={H * 0.6}
+            p={[0, H * 0.2, 0]}
+            color={mixHex(color, kel, 0.4)}
+            emissive={kel}
+            emissiveIntensity={0.7}
+            open
+            side={THREE.DoubleSide}
+            seg={16}
+          />
         </>
       );
     }
@@ -574,7 +673,14 @@ function renderCategory(item: PlacedItem, d: Dims): ReactNode {
         const br = Math.max(0.05, Math.min(r * 0.6, (H - potH) * 0.3) * (0.6 + rand() * 0.5));
         const by = potH + br * 0.6 + rand() * Math.max(H - potH - br * 1.6, 0.01);
         blobs.push(
-          <mesh key={i} position={[Math.cos(a) * rr, by, Math.sin(a) * rr]} rotation={[rand(), rand(), rand()]} scale={[1, 1.25, 1]} castShadow receiveShadow>
+          <mesh
+            key={i}
+            position={[Math.cos(a) * rr, by, Math.sin(a) * rr]}
+            rotation={[rand(), rand(), rand()]}
+            scale={[1, 1.25, 1]}
+            castShadow
+            receiveShadow
+          >
             <icosahedronGeometry args={[br, 0]} />
             <Mat color={greens[i % greens.length]} flat rough={0.85} />
           </mesh>,

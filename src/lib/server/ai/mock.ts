@@ -142,16 +142,16 @@ interface MockItem {
 const BASE_LAYOUT: MockItem[] = [
   { key: "bed", cat: "bed", label: "Bed", x: 108, y: 175, rot: 90, w: 140, d: 200, h: 90, inv: "bed", color: "#e8e4dc", material: "wood" },
   { key: "desk", cat: "desk", label: "Desk", x: 485, y: 75, rot: 270, w: 120, d: 60, h: 75, inv: "desk", color: "#f2f0eb", material: "laminate" },
-  { key: "wardrobe", cat: "wardrobe", label: "Wardrobe", x: 300, y: 35, rot: 0, w: 100, d: 60, h: 200, inv: "wardrobe", color: "#f5f3ee", material: "laminate" },
+  { key: "wardrobe", cat: "wardrobe", label: "Wardrobe", x: 385, y: 200, rot: 270, w: 100, d: 60, h: 200, inv: "wardrobe", color: "#f5f3ee", material: "laminate" },
   { key: "chair", cat: "deskChair", label: "Desk chair", x: 430, y: 75, rot: 90, w: 50, d: 50, h: 90, color: "#3a3a3a", material: "fabric", price: [49, 129] },
   { key: "ns1", cat: "nightstand", label: "Nightstand", x: 25, y: 268, rot: 90, w: 40, d: 35, h: 50, color: "#c9a77c", material: "oak", price: [25, 79] },
   { key: "rug", cat: "rug", label: "Rug 160×230", x: 150, y: 175, rot: 90, w: 160, d: 230, h: 1, color: "#d9cfc1", material: "wool blend", price: [39, 119] },
   { key: "shelf", cat: "shelf", label: "Low shelf", x: 300, y: 330, rot: 180, w: 120, d: 30, h: 70, color: "#c9a77c", material: "oak veneer", price: [45, 129] },
-  { key: "floorlamp", cat: "floorLamp", label: "Floor lamp", x: 385, y: 195, rot: 0, w: 35, d: 35, h: 150, color: "#2b2b2b", material: "metal", kelvin: 2700, lumens: 800, price: [29, 89] },
+  { key: "floorlamp", cat: "floorLamp", label: "Floor lamp", x: 330, y: 240, rot: 0, w: 35, d: 35, h: 150, color: "#2b2b2b", material: "metal", kelvin: 2700, lumens: 800, price: [29, 89] },
   { key: "pendant", cat: "pendantLamp", label: "Pendant lamp", x: 210, y: 180, rot: 0, w: 40, d: 40, h: 30, z: 190, mount: "ceiling", color: "#e9dcc5", material: "paper", kelvin: 2700, lumens: 1000, price: [19, 69] },
   { key: "led", cat: "ledStrip", label: "LED strip (knee wall)", x: 210, y: 356, rot: 180, w: 300, d: 2, h: 1, z: 95, mount: "wall", color: "#fff1d6", material: "LED", kelvin: 2700, lumens: 600, price: [19, 49] },
   { key: "curtain", cat: "curtain", label: "Curtain (niche window)", x: 533, y: 75, rot: 270, w: 140, d: 5, h: 125, z: 92, mount: "wall", color: "#ece6da", material: "linen-look", price: [19, 59] },
-  { key: "plant", cat: "plant", label: "Pothos in pot", x: 445, y: 128, rot: 0, w: 35, d: 35, h: 60, color: "#4f7a4a", material: "plant", price: [15, 39] },
+  { key: "plant", cat: "plant", label: "Pothos in pot", x: 390, y: 320, rot: 0, w: 35, d: 35, h: 60, color: "#4f7a4a", material: "plant", price: [15, 39] },
 ];
 
 const VARIANTS: { name: string; style: string; summary: string; palette: [string, string, string]; paint: [string, string, string]; accents: { name: string; hex: string }[] }[] = [
