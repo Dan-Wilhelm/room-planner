@@ -27,6 +27,9 @@ export function toUserError(err: unknown): Error {
   if (err instanceof Anthropic.AuthenticationError) return new UserFacingError("The Anthropic API key was rejected.", false);
   if (err instanceof Anthropic.BadRequestError) {
     console.error("[anthropic 400]", err.message);
+    if (/credit balance is too low/i.test(err.message)) {
+      return new UserFacingError("The Anthropic account has no credits left — please top up under Plans & Billing in the Anthropic Console.", false);
+    }
     return new UserFacingError("The AI request was rejected (400). Details are in the server log.", false);
   }
   if (err instanceof Anthropic.APIConnectionTimeoutError) return new UserFacingError("The AI request timed out. Please retry.");

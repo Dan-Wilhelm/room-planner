@@ -21,8 +21,10 @@ const Body = z.object({
 function gatewayError(err: unknown): Error {
   const status = (err as { statusCode?: number; status?: number }).statusCode ?? (err as { status?: number }).status;
   const body = String((err as { responseBody?: string }).responseBody ?? (err as Error).message ?? "");
+  console.error("[image] gateway error", status, body.slice(0, 400));
   if (status === 402 && body.includes("quota_for_entity_exceeded")) return new UserFacingError("The AI Gateway budget for this project is used up. Raise it in the Vercel dashboard (AI Gateway → Budgets).", false);
   if (status === 402) return new UserFacingError("No AI Gateway credits left. Add credits in the Vercel dashboard (AI Gateway → Credits).", false);
+  if (status === 403 && /free tier/i.test(body)) return new UserFacingError("This image model needs paid AI Gateway credits (the free tier doesn't include it). Buy credits in the Vercel dashboard (AI Gateway → Credits).", false);
   if (status === 403) return new UserFacingError("AI Gateway needs a verified payment method on the Vercel team before images can be generated.", false);
   if (status === 429) return new UserFacingError("Image generation is rate-limited right now — please retry in a minute.");
   if (status === 401) return new UserFacingError("The server isn't authorised for the AI Gateway (OIDC token missing/expired).", false);
