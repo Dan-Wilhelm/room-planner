@@ -262,18 +262,21 @@ export interface ProductSearchResult {
   droppedUnknownUrls: number;
   notes: string[];
   stoppedForBudget: boolean;
+  diagnostics: { dropped: Record<string, number>; emptySlots: string[]; searchesPerBatch: number; batches: number };
 }
 
 /** Runs the product search in batches (keeps each request well under 100K input tokens). */
 export async function searchProducts(input: ProductSearchInput, emit: Emitter, step = "products"): Promise<ProductSearchResult> {
-  const batchSize = input.mode === "alternatives" ? 1 : 5;
+  const batchSize = input.mode === "alternatives" ? 1 : 4;
   const batches: SlotRequest[][] = [];
   for (let i = 0; i < input.slots.length; i += batchSize) batches.push(input.slots.slice(i, i + batchSize));
-  const perBatchSearches = Math.max(2, Math.floor(input.maxSearches / Math.max(1, batches.length)));
+  // At least one search per slot in the batch plus one spare — never fewer searches than items.
+  const perBatchSearches = Math.max(Math.min(batchSize, input.slots.length) + 1, Math.floor(input.maxSearches / Math.max(1, batches.length)));
 
   const all: SubmitProducts["products"] = [];
   const notes: string[] = [];
   let dropped = 0;
+  const dropReasons: Record<string, number> = { unknownUrl: 0, notProductPage: 0, duplicate: 0, invalidUrl: 0 };
   let spent = 0;
   let stoppedForBudget = false;
 
@@ -300,8 +303,18 @@ export async function searchProducts(input: ProductSearchInput, emit: Emitter, s
       for (const p of final.products) {
         if (!keys.has(p.slotKey)) continue;
         const dedupe = `${p.slotKey}|${p.tier}|${normalizeUrl(p.url)}`;
-        if (!/^https?:\/\//i.test(p.url) || !urls.has(normalizeUrl(p.url)) || !isAcceptableProductUrl(p.url) || seen.has(dedupe)) {
+        const reason = !/^https?:\/\//i.test(p.url)
+          ? "invalidUrl"
+          : !urls.has(normalizeUrl(p.url))
+            ? "unknownUrl"
+            : !isAcceptableProductUrl(p.url)
+              ? "notProductPage"
+              : seen.has(dedupe)
+                ? "duplicate"
+                : null;
+        if (reason) {
           dropped++;
+          dropReasons[reason]++;
           continue;
         }
         seen.add(dedupe);
@@ -309,5 +322,9 @@ export async function searchProducts(input: ProductSearchInput, emit: Emitter, s
       }
     }
   }
-  return { products: all, droppedUnknownUrls: dropped, notes, stoppedForBudget };
+  const covered = new Set(all.map((p) => p.slotKey));
+  const emptySlots = input.slots.filter((s) => !covered.has(s.key)).map((s) => s.label);
+  const diagnostics = { dropped: dropReasons, emptySlots, searchesPerBatch: perBatchSearches, batches: batches.length };
+  console.info("[products]", JSON.stringify({ step, slots: input.slots.length, found: all.length, ...diagnostics, spent: Math.round(spent * 1000) / 1000 }));
+  return { products: all, droppedUnknownUrls: dropped, notes, stoppedForBudget, diagnostics };
 }

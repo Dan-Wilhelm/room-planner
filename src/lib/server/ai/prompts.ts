@@ -76,6 +76,7 @@ export const PRODUCTS_SYSTEM = `You are a frugal shopping researcher for a house
 
 RULES:
 - Search German shops: prefer IKEA (incl. pickup at IKEA Karlsruhe), Amazon.de, Otto; DIY stores (Hornbach, Bauhaus, OBI) for paint and materials; garden centres (e.g. Dehner, Pflanzen-Kölle) for plants. Smaller local shops in/around Karlsruhe only when the search shows a price and a product link.
+- COVER EVERY SLOT. Order: first find ONE good "budget" product for EACH slot; only then add "nicer" products and further candidates while searches remain. Simple small items (painting tape/rollers, bulbs, cushions, throws, plant pots) can be covered together with one search at one shop (e.g. IKEA, OBI, Amazon.de).
 - One search per slot should usually find candidates for BOTH tiers: "budget" = the cheapest product that still looks good; "nicer" = better quality/design at a moderate price. Give up to 3 ranked candidates per tier (rank 1 = best).
 - The product must fit the slot's maximum dimensions (W×D×H in cm). Report real dimensions when the search result shows them (dimsVerified true); otherwise put 0 and dimsVerified false — never invent dimensions, prices or URLs.
 - Only use product URLs that appeared in your search or fetch results. Use web fetch only when price or dimensions are missing from the search results.

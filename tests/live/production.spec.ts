@@ -76,6 +76,10 @@ async function saveResults(page: Page, label: string) {
   fs.writeFileSync(path.join(OUT, "designs.json"), JSON.stringify(designs, null, 1));
   const total = designs.reduce((s, d) => s + (d.costs as { usd: number }[]).reduce((a, c) => a + c.usd, 0), 0);
   log(`${label}: ${designs.length} designs stored, recorded cost $${total.toFixed(3)}`);
+  for (const d of designs as { name: string; slots: { id: string }[]; products: Record<string, { budget: unknown[] }> }[]) {
+    const covered = d.slots.filter((s) => d.products[s.id]?.budget?.length).length;
+    log(`  product coverage ${d.name}: ${covered}/${d.slots.length} items with a Budget product`);
+  }
 }
 
 async function waitRunDone(page: Page, minutes: number) {
@@ -202,7 +206,8 @@ test("final acceptance run on production", async ({ page }) => {
 
   } // end PART === "all"
 
-  // --- Room 2: estimation test (analysis only)
+  // --- Room 2: estimation test (analysis only); LIVE_SKIP_ROOM2=1 skips it
+  if (process.env.LIVE_SKIP_ROOM2 !== "1") {
   await page.goto(projectUrl);
   await page.waitForLoadState("networkidle");
   await page.getByPlaceholder(/New room/).fill("Living room (estimation test)");
@@ -221,6 +226,8 @@ test("final acceptance run on production", async ({ page }) => {
   await expect(page.getByLabel("Ceiling height").first()).toHaveValue("250");
   log(`room 2 estimates: ${await page.getByText(/Estimated values \(\d+\)/).innerText()}`);
   await page.screenshot({ path: path.join(OUT, "03-estimation.png"), fullPage: true });
+
+  } // end room 2
 
   // --- Inspiration test
   await page.goto(projectUrl);

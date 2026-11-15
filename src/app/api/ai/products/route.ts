@@ -112,6 +112,7 @@ export async function POST(req: Request) {
       notes: res.notes,
       droppedUnknownUrls: res.droppedUnknownUrls,
       stoppedForBudget: res.stoppedForBudget,
+      diagnostics: res.diagnostics,
       foundOn: new Date().toISOString().slice(0, 10),
     };
   });

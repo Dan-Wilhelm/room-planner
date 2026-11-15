@@ -455,7 +455,7 @@ async function continueRun(roomId: ID, cb: RunCallbacks, cp: PipelineCheckpoint)
                     return { key: k, category: s.category, label: s.label, maxW: s.maxW, maxD: s.maxD, maxH: s.maxH, color: s.color, material: s.material, styleTags: s.styleTags, targetBudget: s.targetPrice.budget, targetNicer: s.targetPrice.nicer, quantity: s.quantity, lookAlike: s.lookAlike ?? "", notes: s.notes ?? "" };
                   }),
                   mode: "tiers",
-                  maxSearches: Math.min(12, Math.max(3, keys.length + 1)),
+                  maxSearches: Math.min(20, keys.length + 2),
                   stopAtUsd: Math.max(0.02, Math.min(0.35, share * 0.9, remaining)),
                 },
                 { signal: cb.signal, onProgress: (m) => cb.onProgress(d.id, m), onCost: track(d.id) },
